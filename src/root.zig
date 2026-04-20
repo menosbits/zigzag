@@ -193,6 +193,11 @@ pub const components = struct {
     pub const breadcrumb = @import("components/breadcrumb.zig");
     pub const Breadcrumb = breadcrumb.Breadcrumb;
     pub const Crumb = breadcrumb.Crumb;
+    pub const stepper = @import("components/stepper.zig");
+    pub const Stepper = stepper.Stepper;
+    pub const Step = stepper.Step;
+    pub const StepState = stepper.StepState;
+    pub const StepperOrientation = stepper.Orientation;
 };
 
 // Re-export commonly used components at top level
@@ -234,6 +239,9 @@ pub const StatusBar = components.StatusBar;
 pub const StatusSegment = components.StatusSegment;
 pub const Breadcrumb = components.Breadcrumb;
 pub const Crumb = components.Crumb;
+pub const Stepper = components.Stepper;
+pub const Step = components.Step;
+pub const StepState = components.StepState;
 
 // Focus management
 pub const FocusGroup = components.focus.FocusGroup;
