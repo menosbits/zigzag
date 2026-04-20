@@ -7,6 +7,7 @@ const style_mod = @import("../style/style.zig");
 const Color = @import("../style/color.zig").Color;
 const border_mod = @import("../style/border.zig");
 const measure = @import("../layout/measure.zig");
+const fuzzy = @import("../core/fuzzy.zig");
 
 pub fn Dropdown(comptime T: type) type {
     return struct {
@@ -456,25 +457,16 @@ pub fn Dropdown(comptime T: type) type {
                     try self.filtered_indices.append(i);
                 }
             } else {
-                const filter_lower = try toLower(self.allocator, self.filter_text.items);
-                defer self.allocator.free(filter_lower);
-
-                const ScoredIndex = struct { index: usize, score: i32 };
-                var scored = std.array_list.Managed(ScoredIndex).init(self.allocator);
+                var scored = std.array_list.Managed(fuzzy.Ranked).init(self.allocator);
                 defer scored.deinit();
 
                 for (self.items.items, 0..) |item, i| {
-                    const title_lower = try toLower(self.allocator, item.label);
-                    defer self.allocator.free(title_lower);
-
-                    const score = fuzzyScore(title_lower, filter_lower);
-                    if (score > 0) {
-                        try scored.append(.{ .index = i, .score = score });
-                    }
+                    const s = fuzzy.scoreIgnoreCase(item.label, self.filter_text.items);
+                    if (s > 0) try scored.append(.{ .index = i, .score = s });
                 }
 
-                std.mem.sort(ScoredIndex, scored.items, {}, struct {
-                    pub fn lessThan(_: void, a: ScoredIndex, b: ScoredIndex) bool {
+                std.mem.sort(fuzzy.Ranked, scored.items, {}, struct {
+                    pub fn lessThan(_: void, a: fuzzy.Ranked, b: fuzzy.Ranked) bool {
                         return a.score > b.score;
                     }
                 }.lessThan);
@@ -488,40 +480,6 @@ pub fn Dropdown(comptime T: type) type {
                 self.cursor = self.filtered_indices.items.len - 1;
             }
             self.ensureVisible();
-        }
-
-        fn fuzzyScore(text: []const u8, pattern: []const u8) i32 {
-            if (pattern.len == 0) return 1;
-            if (text.len == 0) return 0;
-
-            var score: i32 = 0;
-            var pi: usize = 0;
-            var consecutive: i32 = 0;
-
-            for (text, 0..) |c, ti| {
-                if (pi < pattern.len and c == pattern[pi]) {
-                    score += 1;
-                    consecutive += 1;
-                    score += consecutive;
-                    if (ti == 0 or text[ti - 1] == ' ' or text[ti - 1] == '_' or text[ti - 1] == '-') {
-                        score += 5;
-                    }
-                    pi += 1;
-                } else {
-                    consecutive = 0;
-                }
-            }
-
-            if (pi < pattern.len) return 0;
-            return score;
-        }
-
-        fn toLower(allocator: std.mem.Allocator, str: []const u8) ![]u8 {
-            const result = try allocator.alloc(u8, str.len);
-            for (str, 0..) |c, i| {
-                result[i] = if (c >= 'A' and c <= 'Z') c + 32 else c;
-            }
-            return result;
         }
 
         // ── Rendering ───────────────────────────────────

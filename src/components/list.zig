@@ -5,6 +5,7 @@ const std = @import("std");
 const keys = @import("../input/keys.zig");
 const style_mod = @import("../style/style.zig");
 const Color = @import("../style/color.zig").Color;
+const fuzzy = @import("../core/fuzzy.zig");
 
 pub fn List(comptime T: type) type {
     return struct {
@@ -361,40 +362,24 @@ pub fn List(comptime T: type) type {
             return self.filtered_indices.items;
         }
 
-        const ScoredIndex = struct {
-            index: usize,
-            score: i32,
-        };
-
         pub fn updateFilter(self: *Self) !void {
             self.filtered_indices.clearRetainingCapacity();
 
             if (self.filter_text.items.len == 0) {
-                // No filter - show all
                 for (0..self.items.items.len) |i| {
                     try self.filtered_indices.append(i);
                 }
             } else {
-                // Fuzzy match by title
-                const filter_lower = try self.toLower(self.allocator, self.filter_text.items);
-                defer self.allocator.free(filter_lower);
-
-                var scored = std.array_list.Managed(ScoredIndex).init(self.allocator);
+                var scored = std.array_list.Managed(fuzzy.Ranked).init(self.allocator);
                 defer scored.deinit();
 
                 for (self.items.items, 0..) |item, i| {
-                    const title_lower = try self.toLower(self.allocator, item.title);
-                    defer self.allocator.free(title_lower);
-
-                    const score = fuzzyScore(title_lower, filter_lower);
-                    if (score > 0) {
-                        try scored.append(.{ .index = i, .score = score });
-                    }
+                    const s = fuzzy.scoreIgnoreCase(item.title, self.filter_text.items);
+                    if (s > 0) try scored.append(.{ .index = i, .score = s });
                 }
 
-                // Sort by score descending
-                std.mem.sort(ScoredIndex, scored.items, {}, struct {
-                    pub fn lessThan(_: void, a: ScoredIndex, b: ScoredIndex) bool {
+                std.mem.sort(fuzzy.Ranked, scored.items, {}, struct {
+                    pub fn lessThan(_: void, a: fuzzy.Ranked, b: fuzzy.Ranked) bool {
                         return a.score > b.score;
                     }
                 }.lessThan);
@@ -404,49 +389,10 @@ pub fn List(comptime T: type) type {
                 }
             }
 
-            // Adjust cursor
             if (self.cursor >= self.filtered_indices.items.len and self.filtered_indices.items.len > 0) {
                 self.cursor = self.filtered_indices.items.len - 1;
             }
             self.ensureVisible();
-        }
-
-        fn fuzzyScore(text: []const u8, pattern: []const u8) i32 {
-            if (pattern.len == 0) return 1;
-            if (text.len == 0) return 0;
-
-            var score: i32 = 0;
-            var pi: usize = 0; // pattern index
-            var consecutive: i32 = 0;
-
-            for (text, 0..) |c, ti| {
-                if (pi < pattern.len and c == pattern[pi]) {
-                    score += 1;
-                    consecutive += 1;
-                    // Consecutive bonus
-                    score += consecutive;
-                    // Word start bonus
-                    if (ti == 0 or text[ti - 1] == ' ' or text[ti - 1] == '_' or text[ti - 1] == '-') {
-                        score += 5;
-                    }
-                    pi += 1;
-                } else {
-                    consecutive = 0;
-                }
-            }
-
-            // All pattern chars must match
-            if (pi < pattern.len) return 0;
-            return score;
-        }
-
-        fn toLower(self: *const Self, allocator: std.mem.Allocator, str: []const u8) ![]u8 {
-            _ = self;
-            const result = try allocator.alloc(u8, str.len);
-            for (str, 0..) |c, i| {
-                result[i] = if (c >= 'A' and c <= 'Z') c + 32 else c;
-            }
-            return result;
         }
 
         fn ensureVisible(self: *Self) void {

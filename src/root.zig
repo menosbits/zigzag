@@ -63,6 +63,7 @@ pub const Options = @import("core/context.zig").Options;
 pub const msg = @import("core/message.zig");
 pub const log = @import("core/log.zig");
 pub const Logger = log.Logger;
+pub const fuzzy = @import("core/fuzzy.zig");
 pub const animation = @import("core/animation.zig");
 pub const Tween = animation.Tween;
 pub const Easing = animation.Easing;
@@ -126,6 +127,17 @@ pub const AccessibleLabel = accessibility.AccessibleLabel;
 // Unicode
 pub const unicode = @import("unicode.zig");
 
+// Testing utilities
+pub const testing = struct {
+    pub const snapshot = @import("testing/snapshot.zig");
+    pub const expectSnapshot = snapshot.expectSnapshot;
+    pub const expectSnapshotOpts = snapshot.expectSnapshotOpts;
+    pub const record_replay = @import("testing/record_replay.zig");
+    pub const Recorder = record_replay.Recorder;
+    pub const Player = record_replay.Player;
+    pub const RecordedEvent = record_replay.Event;
+};
+
 // Components
 pub const components = struct {
     pub const TextInput = @import("components/text_input.zig").TextInput;
@@ -186,6 +198,25 @@ pub const components = struct {
     pub const heatmap = @import("components/heatmap.zig");
     pub const Heatmap = heatmap.Heatmap;
     pub const Gauge = @import("components/gauge.zig").Gauge;
+    pub const status_bar = @import("components/status_bar.zig");
+    pub const StatusBar = status_bar.StatusBar;
+    pub const StatusSegment = status_bar.Segment;
+    pub const breadcrumb = @import("components/breadcrumb.zig");
+    pub const Breadcrumb = breadcrumb.Breadcrumb;
+    pub const Crumb = breadcrumb.Crumb;
+    pub const stepper = @import("components/stepper.zig");
+    pub const Stepper = stepper.Stepper;
+    pub const Step = stepper.Step;
+    pub const StepState = stepper.StepState;
+    pub const StepperOrientation = stepper.Orientation;
+    pub const split_pane = @import("components/split_pane.zig");
+    pub const SplitPane = split_pane.SplitPane;
+    pub const SplitPaneOrientation = split_pane.Orientation;
+    pub const SplitPaneDims = split_pane.Dims;
+    pub const command_palette = @import("components/command_palette.zig");
+    pub const CommandPalette = command_palette.CommandPalette;
+    pub const Command = command_palette.Command;
+    pub const CommandPaletteKeyResult = command_palette.KeyResult;
 };
 
 // Re-export commonly used components at top level
@@ -223,6 +254,16 @@ pub const Markdown = components.Markdown;
 pub const Calendar = components.Calendar;
 pub const Heatmap = components.Heatmap;
 pub const Gauge = components.Gauge;
+pub const StatusBar = components.StatusBar;
+pub const StatusSegment = components.StatusSegment;
+pub const Breadcrumb = components.Breadcrumb;
+pub const Crumb = components.Crumb;
+pub const Stepper = components.Stepper;
+pub const Step = components.Step;
+pub const StepState = components.StepState;
+pub const SplitPane = components.SplitPane;
+pub const CommandPalette = components.CommandPalette;
+pub const Command = components.Command;
 
 // Focus management
 pub const FocusGroup = components.focus.FocusGroup;
