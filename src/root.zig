@@ -190,6 +190,9 @@ pub const components = struct {
     pub const status_bar = @import("components/status_bar.zig");
     pub const StatusBar = status_bar.StatusBar;
     pub const StatusSegment = status_bar.Segment;
+    pub const breadcrumb = @import("components/breadcrumb.zig");
+    pub const Breadcrumb = breadcrumb.Breadcrumb;
+    pub const Crumb = breadcrumb.Crumb;
 };
 
 // Re-export commonly used components at top level
@@ -229,6 +232,8 @@ pub const Heatmap = components.Heatmap;
 pub const Gauge = components.Gauge;
 pub const StatusBar = components.StatusBar;
 pub const StatusSegment = components.StatusSegment;
+pub const Breadcrumb = components.Breadcrumb;
+pub const Crumb = components.Crumb;
 
 // Focus management
 pub const FocusGroup = components.focus.FocusGroup;
