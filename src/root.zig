@@ -127,6 +127,13 @@ pub const AccessibleLabel = accessibility.AccessibleLabel;
 // Unicode
 pub const unicode = @import("unicode.zig");
 
+// Testing utilities
+pub const testing = struct {
+    pub const snapshot = @import("testing/snapshot.zig");
+    pub const expectSnapshot = snapshot.expectSnapshot;
+    pub const expectSnapshotOpts = snapshot.expectSnapshotOpts;
+};
+
 // Components
 pub const components = struct {
     pub const TextInput = @import("components/text_input.zig").TextInput;
