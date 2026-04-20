@@ -198,6 +198,10 @@ pub const components = struct {
     pub const Step = stepper.Step;
     pub const StepState = stepper.StepState;
     pub const StepperOrientation = stepper.Orientation;
+    pub const split_pane = @import("components/split_pane.zig");
+    pub const SplitPane = split_pane.SplitPane;
+    pub const SplitPaneOrientation = split_pane.Orientation;
+    pub const SplitPaneDims = split_pane.Dims;
 };
 
 // Re-export commonly used components at top level
@@ -242,6 +246,7 @@ pub const Crumb = components.Crumb;
 pub const Stepper = components.Stepper;
 pub const Step = components.Step;
 pub const StepState = components.StepState;
+pub const SplitPane = components.SplitPane;
 
 // Focus management
 pub const FocusGroup = components.focus.FocusGroup;
