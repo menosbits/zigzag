@@ -187,6 +187,9 @@ pub const components = struct {
     pub const heatmap = @import("components/heatmap.zig");
     pub const Heatmap = heatmap.Heatmap;
     pub const Gauge = @import("components/gauge.zig").Gauge;
+    pub const status_bar = @import("components/status_bar.zig");
+    pub const StatusBar = status_bar.StatusBar;
+    pub const StatusSegment = status_bar.Segment;
 };
 
 // Re-export commonly used components at top level
@@ -224,6 +227,8 @@ pub const Markdown = components.Markdown;
 pub const Calendar = components.Calendar;
 pub const Heatmap = components.Heatmap;
 pub const Gauge = components.Gauge;
+pub const StatusBar = components.StatusBar;
+pub const StatusSegment = components.StatusSegment;
 
 // Focus management
 pub const FocusGroup = components.focus.FocusGroup;
