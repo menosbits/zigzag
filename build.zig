@@ -51,6 +51,12 @@ pub fn build(b: *std.Build) void {
         "heatmap",
         "gauge",
         "flex_layout",
+        "braille_canvas",
+        "rich_log",
+        "screen_stack",
+        "action_system",
+        "data_table",
+        "dev_console",
     };
 
     for (examples) |example_name| {
