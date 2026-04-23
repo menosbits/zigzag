@@ -35,8 +35,11 @@ const Model = struct {
                 .char => |c| switch (c) {
                     'q' => return .quit,
                     's' => {
+                        // Don't relaunch while tasks are still running — that
+                        // confuses the completion counter and can leak threads.
+                        if (self.tasks_launched != 0) return .none;
                         self.status = "Tasks running...";
-                        // Spawn tasks using perform (synchronous simulation)
+                        self.results = .{ "pending...", "pending...", "pending..." };
                         _ = self.async_runner.spawn(&task1);
                         _ = self.async_runner.spawn(&task2);
                         _ = self.async_runner.spawn(&task3);
@@ -56,7 +59,9 @@ const Model = struct {
                         .task_complete => |tr| {
                             if (tr.id < 3) {
                                 self.results[tr.id] = tr.value;
-                                self.tasks_launched -= 1;
+                                // Saturating: if a stray duplicate event
+                                // arrives we don't underflow.
+                                self.tasks_launched -|= 1;
                                 if (self.tasks_launched == 0) {
                                     self.status = "All tasks complete!";
                                 }
