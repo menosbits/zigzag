@@ -13,6 +13,8 @@ const Color = @import("../style/color.zig").Color;
 const border_mod = @import("../style/border.zig");
 const measure = @import("../layout/measure.zig");
 const fuzzy = @import("../core/fuzzy.zig");
+const action_mod = @import("../core/action.zig");
+const ActionRegistry = action_mod.ActionRegistry;
 
 pub const Command = struct {
     id: []const u8,
@@ -122,26 +124,96 @@ pub const CommandPalette = struct {
     }
 
     pub fn deinit(self: *CommandPalette) void {
+        self.freeAllCommandStrings();
         self.commands.deinit();
         self.filtered.deinit();
         self.query.deinit();
     }
 
+    /// Add a command. The palette clones every string in `cmd` (id, label,
+    /// description, shortcut) so the caller is free to pass arena-allocated,
+    /// formatted, or otherwise short-lived strings — no lifetime tracking
+    /// required.
     pub fn addCommand(self: *CommandPalette, cmd: Command) !void {
-        try self.commands.append(cmd);
+        const owned = try self.cloneCommand(cmd);
+        errdefer self.freeCommand(owned);
+        try self.commands.append(owned);
         try self.rebuildFilter();
     }
 
+    /// Replace all commands. Each input command's strings are cloned. Old
+    /// commands are freed.
     pub fn setCommands(self: *CommandPalette, cmds: []const Command) !void {
+        self.freeAllCommandStrings();
         self.commands.clearRetainingCapacity();
-        try self.commands.appendSlice(cmds);
+        for (cmds) |cmd| {
+            const owned = try self.cloneCommand(cmd);
+            errdefer self.freeCommand(owned);
+            try self.commands.append(owned);
+        }
         try self.rebuildFilter();
     }
 
+    /// Convenience: load every enabled action from a registry, formatting its
+    /// binding as the shortcut hint. Cleaner than building Command structs by
+    /// hand and avoids the need to manage shortcut-string lifetimes.
+    pub fn setFromRegistry(self: *CommandPalette, registry: *const ActionRegistry) !void {
+        self.freeAllCommandStrings();
+        self.commands.clearRetainingCapacity();
+        for (registry.actions.items) |a| {
+            if (!a.enabled) continue;
+            const shortcut = if (a.binding) |b|
+                try ActionRegistry.formatKey(self.allocator, b)
+            else
+                try self.allocator.dupe(u8, "");
+            // shortcut is heap-owned; cloneCommand will dup again, so free
+            // the temporary after.
+            defer self.allocator.free(shortcut);
+
+            const owned = try self.cloneCommand(.{
+                .id = a.id,
+                .label = a.label,
+                .description = a.description,
+                .shortcut = shortcut,
+            });
+            errdefer self.freeCommand(owned);
+            try self.commands.append(owned);
+        }
+        try self.rebuildFilter();
+    }
+
+    /// Reset the typed query and cursor without touching the command list.
     pub fn clear(self: *CommandPalette) !void {
         self.query.clearRetainingCapacity();
         self.cursor = 0;
         try self.rebuildFilter();
+    }
+
+    fn cloneCommand(self: *CommandPalette, cmd: Command) !Command {
+        const id = try self.allocator.dupe(u8, cmd.id);
+        errdefer self.allocator.free(id);
+        const label = try self.allocator.dupe(u8, cmd.label);
+        errdefer self.allocator.free(label);
+        const description = try self.allocator.dupe(u8, cmd.description);
+        errdefer self.allocator.free(description);
+        const shortcut = try self.allocator.dupe(u8, cmd.shortcut);
+        return .{
+            .id = id,
+            .label = label,
+            .description = description,
+            .shortcut = shortcut,
+        };
+    }
+
+    fn freeCommand(self: *CommandPalette, cmd: Command) void {
+        self.allocator.free(cmd.id);
+        self.allocator.free(cmd.label);
+        self.allocator.free(cmd.description);
+        self.allocator.free(cmd.shortcut);
+    }
+
+    fn freeAllCommandStrings(self: *CommandPalette) void {
+        for (self.commands.items) |c| self.freeCommand(c);
     }
 
     /// Returns the currently highlighted command, if any.
