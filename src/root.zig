@@ -219,6 +219,10 @@ pub const components = struct {
     pub const CommandPalette = command_palette.CommandPalette;
     pub const Command = command_palette.Command;
     pub const CommandPaletteKeyResult = command_palette.KeyResult;
+    pub const rich_log = @import("components/rich_log.zig");
+    pub const RichLog = rich_log.RichLog;
+    pub const RichLogLevel = rich_log.Level;
+    pub const RichLogEntry = rich_log.Entry;
 };
 
 // Re-export commonly used components at top level
@@ -266,6 +270,8 @@ pub const Step = components.Step;
 pub const StepState = components.StepState;
 pub const SplitPane = components.SplitPane;
 pub const CommandPalette = components.CommandPalette;
+pub const RichLog = components.RichLog;
+pub const RichLogLevel = components.RichLogLevel;
 pub const Command = components.Command;
 
 // Focus management
