@@ -753,7 +753,6 @@ const Model = struct {
 
         const trend_view = try self.chart.view(ctx.allocator);
         const bars_view = try self.bars.view(ctx.allocator);
-        const vertical_view = try self.renderVerticalBars(ctx);
         const snapshot_view = try self.renderStaticSnapshot(ctx);
         const canvas_view = try self.renderChartCanvas(ctx);
 
@@ -774,7 +773,6 @@ const Model = struct {
 
         const trend_box = try trend_style.render(ctx.allocator, try self.section(ctx, "Interpolated Lines + Area", trend_view));
         const bars_box = try bars_style.render(ctx.allocator, try self.section(ctx, "Horizontal Bars", bars_view));
-        const vertical_box = try aux_style.render(ctx.allocator, try self.section(ctx, "Vertical Bars", vertical_view));
         const snapshot_box = try aux_style.render(ctx.allocator, try self.section(ctx, "Static Snapshot", snapshot_view));
         const canvas_box = try aux_style.render(ctx.allocator, try self.section(ctx, "Canvas Plot", canvas_view));
 
@@ -787,7 +785,6 @@ const Model = struct {
         else
             try zz.join.horizontal(ctx.allocator, .middle, &.{ bars_box, "  ", snapshot_box, "  ", canvas_box });
 
-        _ = vertical_box;
         return zz.join.vertical(ctx.allocator, .center, &.{ trend_box, "", bottom });
     }
 
@@ -808,29 +805,6 @@ const Model = struct {
         const content = try std.fmt.allocPrint(ctx.allocator, "{s}\n\n{s}", .{ header, viewport_view });
 
         return box_style.render(ctx.allocator, content);
-    }
-
-    fn renderVerticalBars(_: *const Model, ctx: *const zz.Context) ![]const u8 {
-        const compact = chartsCompact(ctx);
-        const ultra = chartsUltraCompact(ctx);
-        var chart = zz.BarChart.init(ctx.allocator);
-        defer chart.deinit();
-
-        chart.setSize(if (ultra) 16 else if (compact) 18 else 20, if (ultra) 5 else if (compact) 6 else 8);
-        chart.setOrientation(.vertical);
-        chart.setBarWidth(1);
-        chart.setGap(0);
-        chart.show_values = !compact;
-        chart.label_style = (zz.Style{}).fg(zz.Color.gray(18)).inline_style(true);
-        chart.axis_style = (zz.Style{}).fg(zz.Color.gray(10)).inline_style(true);
-        chart.positive_style = (zz.Style{}).fg(zz.Color.hex("#F97316")).inline_style(true);
-        chart.negative_style = (zz.Style{}).fg(zz.Color.hex("#EF4444")).inline_style(true);
-        try chart.addBar(try zz.Bar.init(ctx.allocator, "Mon", 9));
-        try chart.addBar(try zz.Bar.init(ctx.allocator, "Tue", 13));
-        try chart.addBar(try zz.Bar.init(ctx.allocator, "Wed", 6));
-        try chart.addBar(try zz.Bar.init(ctx.allocator, "Thu", -4));
-        try chart.addBar(try zz.Bar.init(ctx.allocator, "Fri", 11));
-        return try chart.view(ctx.allocator);
     }
 
     fn renderChartCanvas(self: *const Model, ctx: *const zz.Context) ![]const u8 {

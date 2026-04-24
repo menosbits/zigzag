@@ -145,10 +145,6 @@ pub const testing = struct {
     pub const snapshot = @import("testing/snapshot.zig");
     pub const expectSnapshot = snapshot.expectSnapshot;
     pub const expectSnapshotOpts = snapshot.expectSnapshotOpts;
-    pub const record_replay = @import("testing/record_replay.zig");
-    pub const Recorder = record_replay.Recorder;
-    pub const Player = record_replay.Player;
-    pub const RecordedEvent = record_replay.Event;
 };
 
 // Components
