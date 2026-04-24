@@ -2,12 +2,6 @@ const std = @import("std");
 const testing = std.testing;
 const zz = @import("zigzag");
 
-fn renderMd(input: []const u8) ![]const u8 {
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    const md = zz.Markdown.init();
-    return md.render(arena.allocator(), input);
-}
-
 test "Markdown renders headers" {
     var arena = std.heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
