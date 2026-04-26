@@ -1,6 +1,7 @@
 //! Sparkline component with configurable aggregation and styling.
 
 const std = @import("std");
+const Writer = std.Io.Writer;
 const charting = @import("charting.zig");
 const progress = @import("progress.zig");
 const style_mod = @import("../style/style.zig");
@@ -110,8 +111,8 @@ pub const Sparkline = struct {
         var visible = try self.bucketValues(allocator);
         defer visible.deinit();
 
-        var result = std.array_list.Managed(u8).init(allocator);
-        const writer = result.writer();
+        var result: Writer.Allocating = .init(allocator);
+        const writer = &result.writer;
 
         if (visible.items.len == 0) {
             for (0..self.display_width) |_| try writer.writeAll(self.empty_char);
@@ -179,7 +180,7 @@ pub const Sparkline = struct {
         for (0..width) |bucket_index| {
             const start = @min(self.data.items.len, @as(usize, @intFromFloat(@floor(@as(f64, @floatFromInt(bucket_index)) * data_len_f / width_f))));
             const end = @min(self.data.items.len, @as(usize, @intFromFloat(@floor(@as(f64, @floatFromInt(bucket_index + 1)) * data_len_f / width_f))));
-            const slice = if (end > start) self.data.items[start..end] else self.data.items[start .. @min(self.data.items.len, start + 1)];
+            const slice = if (end > start) self.data.items[start..end] else self.data.items[start..@min(self.data.items.len, start + 1)];
             try buckets.append(summarize(slice, self.summary));
         }
 
