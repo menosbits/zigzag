@@ -2,6 +2,7 @@
 //! Renders a tree structure with expandable nodes and customizable enumerators.
 
 const std = @import("std");
+const Writer = std.Io.Writer;
 const style_mod = @import("../style/style.zig");
 const Color = @import("../style/color.zig").Color;
 
@@ -121,8 +122,8 @@ pub fn Tree(comptime T: type) type {
 
         /// Render the tree
         pub fn view(self: *const Self, allocator: std.mem.Allocator) ![]const u8 {
-            var result = std.array_list.Managed(u8).init(allocator);
-            const writer = result.writer();
+            var result: Writer.Allocating = .init(allocator);
+            const writer = &result.writer;
 
             for (self.root_indices.items, 0..) |root_idx, i| {
                 if (i > 0) try writer.writeAll("\n");
@@ -134,7 +135,7 @@ pub fn Tree(comptime T: type) type {
 
         fn renderNode(
             self: *const Self,
-            writer: anytype,
+            writer: *Writer,
             allocator: std.mem.Allocator,
             node_idx: usize,
             prefix: []const u8,

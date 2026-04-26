@@ -2,6 +2,7 @@
 //! Supports ANSI 16, 256, and TrueColor (24-bit) colors.
 
 const std = @import("std");
+const Writer = std.Io.Writer;
 const builtin = @import("builtin");
 const ansi = @import("../terminal/ansi.zig");
 
@@ -122,7 +123,7 @@ pub const Color = union(enum) {
     }
 
     /// Write foreground color ANSI sequence
-    pub fn writeFg(self: Color, writer: anytype) !void {
+    pub fn writeFg(self: Color, writer: *Writer) !void {
         switch (self) {
             .none => {},
             .ansi => |c| try writer.print(ansi.CSI ++ "{d}m", .{c.fgCode()}),
@@ -132,7 +133,7 @@ pub const Color = union(enum) {
     }
 
     /// Write background color ANSI sequence
-    pub fn writeBg(self: Color, writer: anytype) !void {
+    pub fn writeBg(self: Color, writer: *Writer) !void {
         switch (self) {
             .none => {},
             .ansi => |c| try writer.print(ansi.CSI ++ "{d}m", .{c.bgCode()}),
