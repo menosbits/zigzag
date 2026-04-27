@@ -107,12 +107,13 @@ pub const MouseState = hitbox.MouseState;
 pub const MouseInteraction = hitbox.Interaction;
 
 // Style
+pub const newStyle = style.newStyle;
 pub const style = @import("style/style.zig");
 pub const Style = style.Style;
 pub const color = @import("style/color.zig");
 pub const Color = color.Color;
+pub const Border = border.BorderChars;
 pub const border = @import("style/border.zig");
-pub const Border = border.Border;
 pub const theme = @import("style/theme.zig");
 pub const Theme = theme.Theme;
 pub const Palette = theme.Palette;

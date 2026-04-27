@@ -203,7 +203,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.cyan());
+        title_style = title_style.fg(zz.Color.cyan);
         title_style = title_style.inline_style(true);
 
         var subtitle_style = zz.Style{};

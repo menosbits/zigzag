@@ -25,9 +25,9 @@ const Model = struct {
 
     pub fn init(self: *Model, _: *zz.Context) zz.Cmd(Msg) {
         self.buttons = .{
-            .{ .label = "  Click Me  ", .color = zz.Color.cyan(), .mouse = .{} },
-            .{ .label = "  Count++   ", .color = zz.Color.green(), .mouse = .{} },
-            .{ .label = "   Reset    ", .color = zz.Color.red(), .mouse = .{} },
+            .{ .label = "  Click Me  ", .color = zz.Color.cyan, .mouse = .{} },
+            .{ .label = "  Count++   ", .color = zz.Color.green, .mouse = .{} },
+            .{ .label = "   Reset    ", .color = zz.Color.red, .mouse = .{} },
         };
         self.click_count = 0;
         self.last_event = "Move the mouse or click a button";
@@ -90,7 +90,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.white());
+        title_style = title_style.fg(zz.Color.white);
         title_style = title_style.inline_style(true);
         const title = title_style.render(ctx.allocator, "Mouse Demo") catch "Mouse Demo";
 
@@ -114,7 +114,7 @@ const Model = struct {
             var s = zz.Style{};
             s = s.borderAll(zz.Border.rounded);
             if (btn.mouse.hover) {
-                s = s.borderForeground(zz.Color.white());
+                s = s.borderForeground(zz.Color.white);
                 s = s.bold(true);
             } else {
                 s = s.borderForeground(btn.color);

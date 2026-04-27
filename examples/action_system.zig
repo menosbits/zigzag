@@ -156,7 +156,7 @@ const Model = struct {
 
         var title = zz.Style{};
         title = title.bold(true);
-        title = title.fg(zz.Color.cyan());
+        title = title.fg(zz.Color.cyan);
         title = title.inline_style(true);
         const title_str = title.render(alloc, "ActionRegistry — one source of truth") catch "";
 

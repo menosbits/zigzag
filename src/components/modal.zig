@@ -83,14 +83,14 @@ pub const Modal = struct {
 
     // ── Styling ────────────────────────────────────────────────────────
 
-    border_chars: border_mod.BorderChars = border_mod.Border.rounded,
-    border_fg: Color = Color.gray(18),
+    border_chars: border_mod.BorderChars = .rounded,
+    border_fg: Color = .gray(18),
     content_bg: Color = .none,
-    title_style: style_mod.Style = makeStyle(.{ .bold_v = true, .fg_color = Color.white() }),
-    body_style: style_mod.Style = makeStyle(.{ .fg_color = Color.gray(20) }),
-    footer_style: style_mod.Style = makeStyle(.{ .fg_color = Color.gray(12), .italic_v = true }),
-    button_active_style: style_mod.Style = makeStyle(.{ .bold_v = true, .fg_color = Color.white(), .bg_color = Color.cyan() }),
-    button_inactive_style: style_mod.Style = makeStyle(.{ .fg_color = Color.gray(14) }),
+    title_style: style_mod.Style = makeStyle(.{ .bold_v = true, .fg_color = .white }),
+    body_style: style_mod.Style = makeStyle(.{ .fg_color = .gray(20) }),
+    footer_style: style_mod.Style = makeStyle(.{ .fg_color = .gray(12), .italic_v = true }),
+    button_active_style: style_mod.Style = makeStyle(.{ .bold_v = true, .fg_color = .white, .bg_color = .cyan }),
+    button_inactive_style: style_mod.Style = makeStyle(.{ .fg_color = .gray(14) }),
     backdrop: ?Backdrop = null,
 
     // ── Types ──────────────────────────────────────────────────────────
@@ -132,19 +132,19 @@ pub const Modal = struct {
         /// Fill character (UTF-8 string, e.g. " ", "░", "▒", "▓", "█").
         char: []const u8 = " ",
         /// Style applied to the backdrop fill.
-        style: style_mod.Style = makeStyle(.{ .bg_color = Color.gray(3) }),
+        style: style_mod.Style = makeStyle(.{ .bg_color = .gray(3) }),
 
         /// Dark semi-transparent backdrop (default).
         pub const dark = Backdrop{};
 
         /// Slightly lighter backdrop.
         pub const medium = Backdrop{
-            .style = makeStyle(.{ .bg_color = Color.gray(5) }),
+            .style = makeStyle(.{ .bg_color = .gray(5) }),
         };
 
         /// Light backdrop.
         pub const light = Backdrop{
-            .style = makeStyle(.{ .bg_color = Color.gray(8) }),
+            .style = makeStyle(.{ .bg_color = .gray(8) }),
         };
 
         /// Clear backdrop — uses the terminal's default background color.
@@ -155,19 +155,19 @@ pub const Modal = struct {
         /// Light shade fill character (░).
         pub const shade_light = Backdrop{
             .char = "░",
-            .style = makeStyle(.{ .fg_color = Color.gray(5) }),
+            .style = makeStyle(.{ .fg_color = .gray(5) }),
         };
 
         /// Medium shade fill character (▒).
         pub const shade_medium = Backdrop{
             .char = "▒",
-            .style = makeStyle(.{ .fg_color = Color.gray(5) }),
+            .style = makeStyle(.{ .fg_color = .gray(5) }),
         };
 
         /// Dense shade fill character (▓).
         pub const shade_dense = Backdrop{
             .char = "▓",
-            .style = makeStyle(.{ .fg_color = Color.gray(4) }),
+            .style = makeStyle(.{ .fg_color = .gray(4) }),
         };
 
         /// Create a solid-color backdrop.
@@ -191,8 +191,8 @@ pub const Modal = struct {
         var m: Modal = .{
             .title = title,
             .body = body,
-            .border_fg = Color.cyan(),
-            .title_style = makeStyle(.{ .bold_v = true, .fg_color = Color.cyan() }),
+            .border_fg = .cyan,
+            .title_style = makeStyle(.{ .bold_v = true, .fg_color = .cyan }),
         };
         m.addButton("OK", .enter);
         return m;
@@ -203,8 +203,8 @@ pub const Modal = struct {
         var m: Modal = .{
             .title = title,
             .body = body,
-            .border_fg = Color.yellow(),
-            .title_style = makeStyle(.{ .bold_v = true, .fg_color = Color.yellow() }),
+            .border_fg = .yellow,
+            .title_style = makeStyle(.{ .bold_v = true, .fg_color = .yellow }),
         };
         m.addButton("Yes", .{ .char = 'y' });
         m.addButton("No", .{ .char = 'n' });
@@ -216,8 +216,8 @@ pub const Modal = struct {
         var m: Modal = .{
             .title = title,
             .body = body,
-            .border_fg = Color.yellow(),
-            .title_style = makeStyle(.{ .bold_v = true, .fg_color = Color.yellow() }),
+            .border_fg = .yellow,
+            .title_style = makeStyle(.{ .bold_v = true, .fg_color = .yellow }),
         };
         m.addButton("OK", .enter);
         return m;
@@ -228,8 +228,8 @@ pub const Modal = struct {
         var m: Modal = .{
             .title = title,
             .body = body,
-            .border_fg = Color.red(),
-            .title_style = makeStyle(.{ .bold_v = true, .fg_color = Color.red() }),
+            .border_fg = .red,
+            .title_style = makeStyle(.{ .bold_v = true, .fg_color = .red }),
         };
         m.addButton("OK", .enter);
         return m;

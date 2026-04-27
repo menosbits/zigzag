@@ -85,7 +85,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.magenta());
+        title_style = title_style.fg(zz.Color.magenta);
         title_style = title_style.inline_style(true);
         const title = title_style.render(ctx.allocator, "Context Menu Example") catch "Context Menu";
 
@@ -97,7 +97,7 @@ const Model = struct {
             if (i == self.selected) {
                 var sel_style = zz.Style{};
                 sel_style = sel_style.bold(true);
-                sel_style = sel_style.fg(zz.Color.cyan());
+                sel_style = sel_style.fg(zz.Color.cyan);
                 sel_style = sel_style.inline_style(true);
                 const line = std.fmt.allocPrint(ctx.allocator, "  > {s}", .{item}) catch "";
                 const styled = sel_style.render(ctx.allocator, line) catch line;
@@ -111,7 +111,7 @@ const Model = struct {
 
         // Status
         var status_style = zz.Style{};
-        status_style = status_style.fg(zz.Color.green());
+        status_style = status_style.fg(zz.Color.green);
         status_style = status_style.inline_style(true);
         const styled_status = status_style.render(ctx.allocator, self.status) catch self.status;
 

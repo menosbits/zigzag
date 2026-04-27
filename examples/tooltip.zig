@@ -141,7 +141,7 @@ const Model = struct {
 
         // Render buttons in a row
         var btn_s = zz.Style{};
-        btn_s = btn_s.fg(zz.Color.white()).inline_style(true);
+        btn_s = btn_s.fg(zz.Color.white).inline_style(true);
 
         var btn_parts: [7][]const u8 = undefined;
         for (labels, 0..) |label, i| {

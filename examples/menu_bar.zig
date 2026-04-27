@@ -136,7 +136,7 @@ const Model = struct {
         ) catch "";
 
         var status_style = zz.Style{};
-        status_style = status_style.fg(zz.Color.cyan());
+        status_style = status_style.fg(zz.Color.cyan);
         status_style = status_style.bold(true);
         status_style = status_style.inline_style(true);
         const status = std.fmt.allocPrint(ctx.allocator, "Status: {s}", .{self.status}) catch "?";

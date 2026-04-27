@@ -90,19 +90,19 @@ const Model = struct {
 
         var title_s = zz.Style{};
         title_s = title_s.bold(true);
-        title_s = title_s.fg(zz.Color.cyan());
+        title_s = title_s.fg(zz.Color.cyan);
         title_s = title_s.inline_style(true);
 
         // Sub-program views
         var box_a = zz.Style{};
         box_a = box_a.borderAll(zz.Border.rounded);
-        box_a = box_a.borderForeground(if (self.active == 0) zz.Color.green() else zz.Color.gray(8));
+        box_a = box_a.borderForeground(if (self.active == 0) zz.Color.green else zz.Color.gray(8));
         box_a = box_a.paddingAll(1);
         box_a = box_a.width(30);
 
         var box_b = zz.Style{};
         box_b = box_b.borderAll(zz.Border.rounded);
-        box_b = box_b.borderForeground(if (self.active == 1) zz.Color.green() else zz.Color.gray(8));
+        box_b = box_b.borderForeground(if (self.active == 1) zz.Color.green else zz.Color.gray(8));
         box_b = box_b.paddingAll(1);
         box_b = box_b.width(30);
 

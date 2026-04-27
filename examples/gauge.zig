@@ -48,13 +48,13 @@ const Model = struct {
 
         var title_s = zz.Style{};
         title_s = title_s.bold(true);
-        title_s = title_s.fg(zz.Color.cyan());
+        title_s = title_s.fg(zz.Color.cyan);
         title_s = title_s.inline_style(true);
         const title = title_s.render(alloc, "Gauge Component Demo") catch "Gauge Demo";
 
         const thresholds = &[_]zz.Gauge.Threshold{
-            .{ .value = 70, .color = zz.Color.yellow() },
-            .{ .value = 90, .color = zz.Color.red() },
+            .{ .value = 70, .color = zz.Color.yellow },
+            .{ .value = 90, .color = zz.Color.red },
         };
 
         // Bar gauge
@@ -83,7 +83,7 @@ const Model = struct {
         blocks.display_style = .blocks;
         blocks.show_percent = true;
         blocks.label = "DSK";
-        blocks.base_color = zz.Color.blue();
+        blocks.base_color = zz.Color.blue;
         const blocks_view = blocks.view(alloc);
 
         var help_s = zz.Style{};

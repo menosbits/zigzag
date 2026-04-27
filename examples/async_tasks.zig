@@ -100,16 +100,16 @@ const Model = struct {
 
         var title_s = zz.Style{};
         title_s = title_s.bold(true);
-        title_s = title_s.fg(zz.Color.cyan());
+        title_s = title_s.fg(zz.Color.cyan);
         title_s = title_s.inline_style(true);
 
         var status_s = zz.Style{};
-        status_s = status_s.fg(zz.Color.yellow());
+        status_s = status_s.fg(zz.Color.yellow);
         status_s = status_s.inline_style(true);
 
         var box_s = zz.Style{};
         box_s = box_s.borderAll(zz.Border.rounded);
-        box_s = box_s.borderForeground(zz.Color.cyan());
+        box_s = box_s.borderForeground(zz.Color.cyan);
         box_s = box_s.paddingAll(1);
         box_s = box_s.width(45);
 

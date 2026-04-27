@@ -40,12 +40,12 @@ const Model = struct {
 
         var title_s = zz.Style{};
         title_s = title_s.bold(true);
-        title_s = title_s.fg(zz.Color.cyan());
+        title_s = title_s.fg(zz.Color.cyan);
         title_s = title_s.inline_style(true);
 
         var box_s = zz.Style{};
         box_s = box_s.borderAll(zz.Border.rounded);
-        box_s = box_s.borderForeground(zz.Color.cyan());
+        box_s = box_s.borderForeground(zz.Color.cyan);
 
         const list_view = self.vlist.view(alloc);
         const boxed = box_s.render(alloc, list_view) catch list_view;

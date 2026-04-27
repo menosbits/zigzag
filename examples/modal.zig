@@ -86,10 +86,10 @@ const Model = struct {
                             self.modal.footer = "Use Tab/arrows to navigate, Enter to select";
                             self.modal.width = .{ .fixed = 50 };
                             self.modal.border_chars = zz.Border.double;
-                            self.modal.border_fg = zz.Color.magenta();
+                            self.modal.border_fg = zz.Color.magenta;
                             self.modal.title_style = blk: {
                                 var s = zz.Style{};
-                                s = s.bold(true).fg(zz.Color.magenta()).inline_style(true);
+                                s = s.bold(true).fg(zz.Color.magenta).inline_style(true);
                                 break :blk s;
                             };
                             self.modal.content_bg = zz.Color.gray(2);
@@ -126,7 +126,7 @@ const Model = struct {
         hint_s = hint_s.fg(zz.Color.gray(14)).inline_style(true);
 
         var result_s = zz.Style{};
-        result_s = result_s.fg(zz.Color.cyan()).inline_style(true);
+        result_s = result_s.fg(zz.Color.cyan).inline_style(true);
 
         var status_s = zz.Style{};
         status_s = status_s.fg(zz.Color.gray(12)).inline_style(true);

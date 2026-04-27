@@ -128,7 +128,7 @@ const Model = struct {
 
         var title = zz.Style{};
         title = title.bold(true);
-        title = title.fg(zz.Color.cyan());
+        title = title.fg(zz.Color.cyan);
         title = title.inline_style(true);
         const t = title.render(alloc, "RichLog — append-only with level filter & search") catch "";
 

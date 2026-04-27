@@ -106,7 +106,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.magenta());
+        title_style = title_style.fg(zz.Color.magenta);
         title_style = title_style.inline_style(true);
         const title = title_style.render(ctx.allocator, "Toast Notifications") catch "Toast";
 
@@ -119,7 +119,7 @@ const Model = struct {
         };
 
         var info_style = zz.Style{};
-        info_style = info_style.fg(zz.Color.cyan());
+        info_style = info_style.fg(zz.Color.cyan);
         info_style = info_style.inline_style(true);
         const info = std.fmt.allocPrint(
             ctx.allocator,

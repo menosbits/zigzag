@@ -58,14 +58,14 @@ const Model = struct {
         // -- Render each panel into styled boxes --
 
         // Header
-        const header = renderPanel(alloc, "Dashboard", rows[0].width, rows[0].height, zz.Color.cyan(), true);
+        const header = renderPanel(alloc, "Dashboard", rows[0].width, rows[0].height, zz.Color.cyan, true);
 
         // Sidebar
         const sidebar_items =
             "  [1] Overview\n" ++
             "  [2] Metrics\n" ++
             "  [3] Settings";
-        const sidebar = renderPanel(alloc, sidebar_items, cols[0].width, cols[0].height, zz.Color.magenta(), self.selected_panel == 0);
+        const sidebar = renderPanel(alloc, sidebar_items, cols[0].width, cols[0].height, zz.Color.magenta, self.selected_panel == 0);
 
         // Main content area
         const main_text = switch (self.selected_panel) {
@@ -74,7 +74,7 @@ const Model = struct {
             2 => "Theme: Dark\nRefresh: 5s\nNotifications: On",
             else => "",
         };
-        const main_panel = renderPanel(alloc, main_text, cols[1].width, cols[1].height, zz.Color.green(), self.selected_panel == 1);
+        const main_panel = renderPanel(alloc, main_text, cols[1].width, cols[1].height, zz.Color.green, self.selected_panel == 1);
 
         // Footer
         var help_style = zz.Style{};

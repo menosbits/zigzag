@@ -36,8 +36,8 @@ pub fn VirtualList(comptime T: type) type {
         // Styling
         cursor_style: style_mod.Style = blk: {
             var s = style_mod.Style{};
-            s = s.bg(Color.blue());
-            s = s.fg(Color.white());
+            s = s.bg(.blue);
+            s = s.fg(.white);
             s = s.inline_style(true);
             break :blk s;
         },
@@ -48,13 +48,13 @@ pub fn VirtualList(comptime T: type) type {
         },
         selected_style: style_mod.Style = blk: {
             var s = style_mod.Style{};
-            s = s.fg(Color.green());
+            s = s.fg(.green);
             s = s.inline_style(true);
             break :blk s;
         },
         scrollbar_style: style_mod.Style = blk: {
             var s = style_mod.Style{};
-            s = s.fg(Color.gray(8));
+            s = s.fg(.gray(8));
             s = s.inline_style(true);
             break :blk s;
         },
@@ -195,7 +195,7 @@ pub fn VirtualList(comptime T: type) type {
                 writer.writeByte('\n') catch {};
                 const count_str = std.fmt.allocPrint(allocator, " {d}/{d}", .{ self.cursor + 1, total }) catch "";
                 var cs = style_mod.Style{};
-                cs = cs.fg(Color.gray(10));
+                cs = cs.fg(.gray(10));
                 cs = cs.inline_style(true);
                 writer.writeAll(cs.render(allocator, count_str) catch count_str) catch {};
             }

@@ -41,7 +41,7 @@ const Model = struct {
         // Title style
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.magenta());
+        title_style = title_style.fg(zz.Color.magenta);
         title_style = title_style.inline_style(true);
 
         // Counter value style - changes color based on value
@@ -49,16 +49,16 @@ const Model = struct {
         counter_style = counter_style.bold(true);
         counter_style = counter_style.inline_style(true);
         counter_style = counter_style.fg(if (self.count > 0)
-            zz.Color.green()
+            zz.Color.green
         else if (self.count < 0)
-            zz.Color.red()
+            zz.Color.red
         else
-            zz.Color.white());
+            zz.Color.white);
 
         // Border style
         var box_style = zz.Style{};
         box_style = box_style.borderAll(zz.Border.rounded);
-        box_style = box_style.borderForeground(zz.Color.cyan());
+        box_style = box_style.borderForeground(zz.Color.cyan);
         box_style = box_style.paddingAll(1);
         box_style = box_style.alignH(.center);
 
