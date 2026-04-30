@@ -74,7 +74,7 @@ const Model = struct {
     }
 
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
-        const style = zz.newStyle().bold(true).fg(.cyan);
+        const style = (zz.Style{}).bold(true).fg(.cyan);
         const text = std.fmt.allocPrint(ctx.allocator, "Count: {d}\n\nPress q to quit", .{self.count}) catch "Error";
         return style.render(ctx.allocator, text) catch text;
     }
@@ -160,7 +160,7 @@ return .{ .delete_image = .all };              // Free all cached images
 The styling system is inspired by Lipgloss:
 
 ```zig
-const style = zz.newStyle()
+const style = (zz.Style{})
     .bold(true)
     .italic(true)
     .fg(.cyan)
@@ -180,14 +180,14 @@ const output = try style.render(allocator, "Hello, World!");
 // render() does not append an implicit trailing '\n'
 
 // Text transforms
-const upper_style = zz.newStyle().transform(.uppercase);
+const upper_style = (zz.Style{}).transform(.uppercase);
 const shouting = try upper_style.render(allocator, "hello"); // "HELLO"
 
 // Inline mode is useful when embedding block-styled output in a single line
-const inline = zz.newStyle().fg(.cyan).inline_style(true);
+const inline = (zz.Style{}).fg(.cyan).inline_style(true);
 
 // Whitespace formatting controls
-const ws_style = zz.newStyle()
+const ws_style = (zz.Style{})
     .underline(true)
     .setUnderlineSpaces(true)      // Underline extends through spaces
     .setColorWhitespace(false);     // Don't apply bg color to whitespace
@@ -196,11 +196,11 @@ const ws_style = zz.newStyle()
 const derived = style.unsetBold().unsetPadding().unsetBorder();
 
 // Style inheritance (unset values inherit from parent)
-const child = zz.newStyle().fg(.red).inherit(style);
+const child = (zz.Style{}).fg(.red).inherit(style);
 
 // Style ranges - apply different styles to byte ranges
 const ranges = &[_]zz.StyleRange{
-    .{ .start = 0, .end = 5, .s = zz.newStyle().bold(true) },
+    .{ .start = 0, .end = 5, .s = (zz.Style{}).bold(true) },
 };
 const ranged = try zz.renderWithRanges(allocator, "Hello World", ranges);
 
@@ -306,8 +306,8 @@ try viewport.setContent(long_text);
 viewport.setWrap(true);
 viewport.setScrollbarChars("·", "█");
 viewport.setScrollbarStyle(
-    zz.newStyle().fg(.gray(8)).inline_style(true),
-    zz.newStyle().fg(.cyan).inline_style(true),
+    (zz.Style{}).fg(.gray(8)).inline_style(true),
+    (zz.Style{}).fg(.cyan).inline_style(true),
 );
 viewport.handleKey(key_event);  // Supports j/k, Page Up/Down, etc.
 ```
@@ -413,7 +413,7 @@ chart.x_axis = .{ .title = "Time", .tick_count = 5, .show_grid = true };
 chart.y_axis = .{ .title = "CPU", .tick_count = 5, .show_grid = true };
 
 var dataset = try zz.ChartDataset.init(allocator, "load");
-dataset.setStyle(zz.newStyle().fg(.cyan).bold(true));
+dataset.setStyle((zz.Style{}).fg(.cyan).bold(true));
 dataset.setShowPoints(true);
 dataset.setInterpolation(.monotone_cubic);
 dataset.setInterpolationSteps(10);
@@ -451,8 +451,8 @@ defer canvas.deinit();
 canvas.setSize(24, 10);
 canvas.setMarker(.braille);
 canvas.setRanges(.{ .min = -1, .max = 1 }, .{ .min = -1, .max = 1 });
-try canvas.drawLineStyled(-1, -1, 1, 1, zz.newStyle().fg(.yellow), null);
-try canvas.drawPointStyled(0.25, 0.7, zz.newStyle().fg(.cyan), null);
+try canvas.drawLineStyled(-1, -1, 1, 1, (zz.Style{}).fg(.yellow), null);
+try canvas.drawPointStyled(0.25, 0.7, (zz.Style{}).fg(.cyan), null);
 const view = try canvas.view(allocator);
 ```
 
