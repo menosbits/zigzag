@@ -63,7 +63,7 @@ const Model = struct {
 
         var title_s = zz.Style{};
         title_s = title_s.bold(true);
-        title_s = title_s.fg(zz.Color.cyan());
+        title_s = title_s.fg(zz.Color.cyan);
         title_s = title_s.inline_style(true);
 
         var dv = zz.components.diff_view.DiffView{};

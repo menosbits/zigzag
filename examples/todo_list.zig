@@ -138,7 +138,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.cyan());
+        title_style = title_style.fg(zz.Color.cyan);
         title_style = title_style.inline_style(true);
 
         var box_style = zz.Style{};
@@ -155,7 +155,7 @@ const Model = struct {
         // Show filter if enabled
         if (self.list.filter_enabled) {
             var filter_style = zz.Style{};
-            filter_style = filter_style.fg(zz.Color.yellow());
+            filter_style = filter_style.fg(zz.Color.yellow);
             filter_style = filter_style.inline_style(true);
             const filter_text = std.fmt.allocPrint(ctx.allocator, "Filter: {s}", .{self.list.filter_text.items}) catch "Filter:";
             const styled_filter = filter_style.render(ctx.allocator, filter_text) catch filter_text;
@@ -195,7 +195,7 @@ const Model = struct {
             } else if (i == self.list.cursor) {
                 var selected_style = zz.Style{};
                 selected_style = selected_style.bold(true);
-                selected_style = selected_style.fg(zz.Color.magenta());
+                selected_style = selected_style.fg(zz.Color.magenta);
                 selected_style = selected_style.inline_style(true);
                 const styled = selected_style.render(ctx.allocator, item.title) catch item.title;
                 writer.writeAll(styled) catch {};

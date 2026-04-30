@@ -104,18 +104,18 @@ const Model = struct {
         };
 
         var cpu = zz.ChartDataset.init(ctx.persistent_allocator, "CPU") catch unreachable;
-        cpu.setStyle((zz.Style{}).fg(zz.Color.cyan()).bold(true));
+        cpu.setStyle((zz.Style{}).fg(zz.Color.cyan).bold(true));
         cpu.setShowPoints(true);
         cpu.setInterpolation(.monotone_cubic);
         cpu.setInterpolationSteps(10);
 
         var mem = zz.ChartDataset.init(ctx.persistent_allocator, "Memory") catch unreachable;
-        mem.setStyle((zz.Style{}).fg(zz.Color.magenta()));
+        mem.setStyle((zz.Style{}).fg(zz.Color.magenta));
         mem.setInterpolation(.catmull_rom);
         mem.setInterpolationSteps(10);
 
         var backlog = zz.ChartDataset.init(ctx.persistent_allocator, "Backlog") catch unreachable;
-        backlog.setStyle((zz.Style{}).fg(zz.Color.yellow()));
+        backlog.setStyle((zz.Style{}).fg(zz.Color.yellow));
         backlog.setGraphType(.area);
         backlog.setInterpolation(.step_center);
         backlog.setFillBaseline(18.0);
@@ -136,8 +136,8 @@ const Model = struct {
         self.bars.setOrientation(.horizontal);
         self.bars.show_values = true;
         self.bars.label_style = (zz.Style{}).fg(zz.Color.gray(18)).inline_style(true);
-        self.bars.positive_style = (zz.Style{}).fg(zz.Color.green()).inline_style(true);
-        self.bars.negative_style = (zz.Style{}).fg(zz.Color.red()).inline_style(true);
+        self.bars.positive_style = (zz.Style{}).fg(zz.Color.green).inline_style(true);
+        self.bars.negative_style = (zz.Style{}).fg(zz.Color.red).inline_style(true);
         self.bars.axis_style = (zz.Style{}).fg(zz.Color.gray(10)).inline_style(true);
         self.bars.addBar(zz.Bar.init(ctx.persistent_allocator, "api", 22) catch unreachable) catch unreachable;
         self.bars.addBar(zz.Bar.init(ctx.persistent_allocator, "db", -10) catch unreachable) catch unreachable;
@@ -581,7 +581,7 @@ const Model = struct {
         // Spinner
         const spinner_view = if (self.progress.isComplete()) blk: {
             var done_style = zz.Style{};
-            done_style = done_style.fg(zz.Color.green());
+            done_style = done_style.fg(zz.Color.green);
             done_style = done_style.inline_style(true);
             break :blk try done_style.render(ctx.allocator, "* All tasks complete!");
         } else try self.spinner.viewWithTitle(ctx.allocator, "Processing...");
@@ -593,7 +593,7 @@ const Model = struct {
         // Bottom box
         var bottom_style = zz.Style{};
         bottom_style = bottom_style.borderAll(zz.Border.rounded);
-        bottom_style = bottom_style.borderForeground(zz.Color.green());
+        bottom_style = bottom_style.borderForeground(zz.Color.green);
         bottom_style = bottom_style.paddingAll(1);
 
         const bottom_content = if (has_notifs)
@@ -609,19 +609,19 @@ const Model = struct {
     fn renderDashboardStats(self: *const Model, ctx: *const zz.Context) ![]const u8 {
         var box_style = zz.Style{};
         box_style = box_style.borderAll(zz.Border.rounded);
-        box_style = box_style.borderForeground(zz.Color.cyan());
+        box_style = box_style.borderForeground(zz.Color.cyan);
         box_style = box_style.borderTopForeground(zz.Color.hex("#4ECDC4"));
         box_style = box_style.paddingAll(1);
         box_style = box_style.width(25);
 
         var header_style = zz.Style{};
         header_style = header_style.bold(true);
-        header_style = header_style.fg(zz.Color.cyan());
+        header_style = header_style.fg(zz.Color.cyan);
         header_style = header_style.inline_style(true);
 
         var value_style = zz.Style{};
         value_style = value_style.bold(true);
-        value_style = value_style.fg(zz.Color.white());
+        value_style = value_style.fg(zz.Color.white);
         value_style = value_style.inline_style(true);
 
         var label_style = zz.Style{};
@@ -635,13 +635,13 @@ const Model = struct {
         const fps_label = try label_style.render(ctx.allocator, " FPS");
 
         var paused_style = zz.Style{};
-        paused_style = paused_style.fg(zz.Color.yellow());
+        paused_style = paused_style.fg(zz.Color.yellow);
         paused_style = paused_style.inline_style(true);
         const status = if (self.paused)
             try paused_style.render(ctx.allocator, "PAUSED")
         else blk: {
             var run_style = zz.Style{};
-            run_style = run_style.fg(zz.Color.green());
+            run_style = run_style.fg(zz.Color.green);
             run_style = run_style.inline_style(true);
             break :blk try run_style.render(ctx.allocator, "RUNNING");
         };
@@ -656,13 +656,13 @@ const Model = struct {
     fn renderDashboardProgress(self: *const Model, ctx: *const zz.Context) ![]const u8 {
         var box_style = zz.Style{};
         box_style = box_style.borderAll(zz.Border.double);
-        box_style = box_style.borderForeground(zz.Color.magenta());
+        box_style = box_style.borderForeground(zz.Color.magenta);
         box_style = box_style.paddingAll(1);
         box_style = box_style.width(35);
 
         var header_style = zz.Style{};
         header_style = header_style.bold(true);
-        header_style = header_style.fg(zz.Color.magenta());
+        header_style = header_style.fg(zz.Color.magenta);
         header_style = header_style.inline_style(true);
         const header = try header_style.render(ctx.allocator, "Progress");
 
@@ -687,7 +687,7 @@ const Model = struct {
         var table_box_style = zz.Style{};
         table_box_style = table_box_style.borderAll(zz.Border.normal);
         if (self.data_focus == .table_focus) {
-            table_box_style = table_box_style.borderForeground(zz.Color.cyan());
+            table_box_style = table_box_style.borderForeground(zz.Color.cyan);
         } else {
             table_box_style = table_box_style.borderForeground(zz.Color.gray(8));
         }
@@ -699,7 +699,7 @@ const Model = struct {
         var tree_box_style = zz.Style{};
         tree_box_style = tree_box_style.borderAll(zz.Border.rounded);
         if (self.data_focus == .tree_focus) {
-            tree_box_style = tree_box_style.borderForeground(zz.Color.cyan());
+            tree_box_style = tree_box_style.borderForeground(zz.Color.cyan);
         } else {
             tree_box_style = tree_box_style.borderForeground(zz.Color.gray(8));
         }
@@ -707,7 +707,7 @@ const Model = struct {
 
         var tree_header_style = zz.Style{};
         tree_header_style = tree_header_style.bold(true);
-        tree_header_style = tree_header_style.fg(zz.Color.yellow());
+        tree_header_style = tree_header_style.fg(zz.Color.yellow);
         tree_header_style = tree_header_style.inline_style(true);
         const tree_header = try tree_header_style.render(ctx.allocator, "Project Structure");
         const tree_content = try std.fmt.allocPrint(ctx.allocator, "{s}\n\n{s}", .{ tree_header, tree_view });
@@ -722,7 +722,7 @@ const Model = struct {
 
         var list_header_style = zz.Style{};
         list_header_style = list_header_style.bold(true);
-        list_header_style = list_header_style.fg(zz.Color.green());
+        list_header_style = list_header_style.fg(zz.Color.green);
         list_header_style = list_header_style.inline_style(true);
         const list_header = try list_header_style.render(ctx.allocator, "TODO Items");
         const list_content = try std.fmt.allocPrint(ctx.allocator, "{s}\n\n{s}", .{ list_header, list_view });
@@ -756,17 +756,17 @@ const Model = struct {
 
         var trend_style = zz.Style{};
         trend_style = trend_style.borderAll(zz.Border.rounded);
-        trend_style = trend_style.borderForeground(zz.Color.cyan());
+        trend_style = trend_style.borderForeground(zz.Color.cyan);
         trend_style = trend_style.paddingLeft(1).paddingRight(1);
 
         var bars_style = zz.Style{};
         bars_style = bars_style.borderAll(zz.Border.rounded);
-        bars_style = bars_style.borderForeground(zz.Color.green());
+        bars_style = bars_style.borderForeground(zz.Color.green);
         bars_style = bars_style.paddingLeft(1).paddingRight(1);
 
         var aux_style = zz.Style{};
         aux_style = aux_style.borderAll(zz.Border.rounded);
-        aux_style = aux_style.borderForeground(zz.Color.yellow());
+        aux_style = aux_style.borderForeground(zz.Color.yellow);
         aux_style = aux_style.paddingLeft(1).paddingRight(1);
 
         const trend_box = try trend_style.render(ctx.allocator, try self.section(ctx, "Interpolated Lines + Area", trend_view));
@@ -791,12 +791,12 @@ const Model = struct {
 
         var box_style = zz.Style{};
         box_style = box_style.borderAll(zz.Border.thick);
-        box_style = box_style.borderForeground(zz.Color.blue());
+        box_style = box_style.borderForeground(zz.Color.blue);
         box_style = box_style.paddingAll(1);
 
         var header_style = zz.Style{};
         header_style = header_style.bold(true);
-        header_style = header_style.fg(zz.Color.blue());
+        header_style = header_style.fg(zz.Color.blue);
         header_style = header_style.inline_style(true);
         const header = try header_style.render(ctx.allocator, "File Browser");
 
@@ -817,7 +817,7 @@ const Model = struct {
         canvas.setRanges(.{ .min = -1.2, .max = 1.2 }, .{ .min = -1.2, .max = 1.2 });
 
         var style = zz.Style{};
-        style = style.fg(zz.Color.yellow());
+        style = style.fg(zz.Color.yellow);
         style = style.inline_style(true);
 
         for (0..64) |i| {
@@ -870,7 +870,7 @@ const Model = struct {
         _ = self;
         var header_style = zz.Style{};
         header_style = header_style.bold(true);
-        header_style = header_style.fg(zz.Color.white());
+        header_style = header_style.fg(zz.Color.white);
         header_style = header_style.inline_style(true);
         const header = try header_style.render(ctx.allocator, title);
         return try std.fmt.allocPrint(ctx.allocator, "{s}\n{s}", .{ header, body });
@@ -944,13 +944,13 @@ const Model = struct {
         // -- Fullwidth/Halfwidth comparison box --
         var fw_header_style = zz.Style{};
         fw_header_style = fw_header_style.bold(true);
-        fw_header_style = fw_header_style.fg(zz.Color.yellow());
+        fw_header_style = fw_header_style.fg(zz.Color.yellow);
         fw_header_style = fw_header_style.inline_style(true);
         const fw_header = try fw_header_style.render(alloc, "Width Comparison");
 
         var fw_style = zz.Style{};
         fw_style = fw_style.borderAll(zz.Border.rounded);
-        fw_style = fw_style.borderForeground(zz.Color.yellow());
+        fw_style = fw_style.borderForeground(zz.Color.yellow);
         fw_style = fw_style.paddingLeft(1).paddingRight(1);
 
         const fw_content = try std.fmt.allocPrint(alloc, "{s}\n\n  Fullwidth : \u{FF21}\u{FF22}\u{FF23}\u{FF24}\u{FF25}   (5 chars = 10 cols)\n  Halfwidth : ABCDE        (5 chars =  5 cols)\n  Mixed     : A\u{FF22}C\u{FF24}E        (5 chars =  7 cols)", .{fw_header});
@@ -960,13 +960,13 @@ const Model = struct {
         // -- Combining characters box --
         var comb_header_style = zz.Style{};
         comb_header_style = comb_header_style.bold(true);
-        comb_header_style = comb_header_style.fg(zz.Color.magenta());
+        comb_header_style = comb_header_style.fg(zz.Color.magenta);
         comb_header_style = comb_header_style.inline_style(true);
         const comb_header = try comb_header_style.render(alloc, "Combining Characters");
 
         var comb_style = zz.Style{};
         comb_style = comb_style.borderAll(zz.Border.rounded);
-        comb_style = comb_style.borderForeground(zz.Color.magenta());
+        comb_style = comb_style.borderForeground(zz.Color.magenta);
         comb_style = comb_style.paddingLeft(1).paddingRight(1);
 
         const comb_content = try std.fmt.allocPrint(alloc, "{s}\n\n  e\u{0301} = e + combining acute   (1 col)\n  a\u{030A} = a + combining ring     (1 col)\n  o\u{0308} = o + combining diaeresis (1 col)\n  n\u{0303} = n + combining tilde     (1 col)", .{comb_header});
@@ -976,13 +976,13 @@ const Model = struct {
         // -- Alignment demo --
         var align_header_style = zz.Style{};
         align_header_style = align_header_style.bold(true);
-        align_header_style = align_header_style.fg(zz.Color.green());
+        align_header_style = align_header_style.fg(zz.Color.green);
         align_header_style = align_header_style.inline_style(true);
         const align_header = try align_header_style.render(alloc, "Alignment Demo");
 
         var align_style = zz.Style{};
         align_style = align_style.borderAll(zz.Border.double);
-        align_style = align_style.borderForeground(zz.Color.green());
+        align_style = align_style.borderForeground(zz.Color.green);
         align_style = align_style.paddingLeft(1).paddingRight(1);
 
         const align_content = try std.fmt.allocPrint(alloc, "{s}\n\n  |hello     |  5 cols\n  |\u{4F60}\u{597D}      |  4 cols (2 wide chars)\n  |\u{03B1}\u{03B2}\u{03B3}\u{03B4}      |  4 cols (Greek)\n  |caf\u{00E9}      |  4 cols (precomposed)\n  |cafe\u{0301}      |  4 cols (combining)", .{align_header});

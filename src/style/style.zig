@@ -11,7 +11,6 @@ const overflow_mod = @import("overflow.zig");
 pub const Overflow = overflow_mod.Overflow;
 
 pub const Color = color_mod.Color;
-pub const Border = border_mod.Border;
 pub const BorderChars = border_mod.BorderChars;
 pub const Sides = border_mod.Sides;
 
@@ -92,8 +91,8 @@ pub const Style = struct {
     margin_val: Spacing = .{},
 
     // Border
-    border_style: BorderChars = Border.none,
-    border_sides: Sides = Sides.none,
+    border_style: BorderChars = .none,
+    border_sides: Sides = .none,
     border_fg: Color = .none,
     border_bg: Color = .none,
 
@@ -272,8 +271,8 @@ pub const Style = struct {
 
     pub fn unsetBorder(self: Self) Self {
         var s = self;
-        s.border_style = Border.none;
-        s.border_sides = Sides.none;
+        s.border_style = .none;
+        s.border_sides = .none;
         s.border_fg = .none;
         s.border_bg = .none;
         s.border_top_fg = .none;
@@ -319,7 +318,7 @@ pub const Style = struct {
     }
 
     pub fn paddingAll(self: Self, n: u16) Self {
-        return self.padding(Spacing.all(n));
+        return self.padding(.all(n));
     }
 
     pub fn paddingLeft(self: Self, n: u16) Self {
@@ -353,7 +352,7 @@ pub const Style = struct {
     }
 
     pub fn marginAll(self: Self, n: u16) Self {
-        return self.margin(Spacing.all(n));
+        return self.margin(.all(n));
     }
 
     pub fn marginLeft(self: Self, n: u16) Self {
@@ -389,7 +388,7 @@ pub const Style = struct {
     }
 
     pub fn borderAll(self: Self, chars: BorderChars) Self {
-        return self.border(chars, Sides.all);
+        return self.border(chars, .all);
     }
 
     pub fn borderForeground(self: Self, c: Color) Self {
@@ -972,11 +971,6 @@ pub const Style = struct {
         return self;
     }
 };
-
-/// Create a new empty style
-pub fn newStyle() Style {
-    return Style{};
-}
 
 /// Style range for applying different styles to byte ranges
 pub const StyleRange = struct {

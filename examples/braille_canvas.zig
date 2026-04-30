@@ -91,12 +91,12 @@ const Model = struct {
         const ty: i32 = @intFromFloat(self.ball_y);
 
         var trail_style = zz.Style{};
-        trail_style = trail_style.fg(zz.Color.cyan());
+        trail_style = trail_style.fg(zz.Color.cyan);
         trail_style = trail_style.inline_style(true);
         c.drawCircleStyled(tx, ty, 3, trail_style);
 
         var ball_style = zz.Style{};
-        ball_style = ball_style.fg(zz.Color.magenta());
+        ball_style = ball_style.fg(zz.Color.magenta);
         ball_style = ball_style.bold(true);
         ball_style = ball_style.inline_style(true);
         c.drawCircleStyled(tx, ty, 1, ball_style);
@@ -105,7 +105,7 @@ const Model = struct {
 
         var title = zz.Style{};
         title = title.bold(true);
-        title = title.fg(zz.Color.cyan());
+        title = title.fg(zz.Color.cyan);
         title = title.inline_style(true);
         const t = title.render(alloc, "BrailleCanvas — bouncing ball") catch "";
 

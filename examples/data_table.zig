@@ -66,7 +66,7 @@ const Model = struct {
 
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.cyan());
+        title_style = title_style.fg(zz.Color.cyan);
         title_style = title_style.inline_style(true);
         const title = title_style.render(alloc, "DataTable — frozen columns + cell cursor") catch "";
 

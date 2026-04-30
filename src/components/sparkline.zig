@@ -35,7 +35,7 @@ pub const Sparkline = struct {
             .retention_limit = 40,
             .spark_style = blk: {
                 var s = Style{};
-                s = s.fg(Color.green());
+                s = s.fg(.green);
                 break :blk charting.inlineStyle(s);
             },
             .empty_char = " ",

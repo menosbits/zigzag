@@ -76,7 +76,7 @@ const Model = struct {
         // Title
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.cyan());
+        title_style = title_style.fg(zz.Color.cyan);
         title_style = title_style.inline_style(true);
         const title = title_style.render(ctx.allocator, "ZigZag Text Editor") catch "Text Editor";
 
@@ -102,7 +102,7 @@ const Model = struct {
 
         // Status message
         var msg_style = zz.Style{};
-        msg_style = msg_style.fg(zz.Color.green());
+        msg_style = msg_style.fg(zz.Color.green);
         msg_style = msg_style.inline_style(true);
         const msg = msg_style.render(ctx.allocator, self.status_message) catch "";
 

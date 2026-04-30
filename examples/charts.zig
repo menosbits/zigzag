@@ -33,18 +33,18 @@ const Model = struct {
         };
 
         var cpu = zz.ChartDataset.init(ctx.persistent_allocator, "CPU") catch unreachable;
-        cpu.setStyle((zz.Style{}).fg(zz.Color.cyan()).bold(true));
+        cpu.setStyle((zz.Style{}).fg(zz.Color.cyan).bold(true));
         cpu.setShowPoints(true);
         cpu.setInterpolation(.monotone_cubic);
         cpu.setInterpolationSteps(10);
 
         var mem = zz.ChartDataset.init(ctx.persistent_allocator, "Memory") catch unreachable;
-        mem.setStyle((zz.Style{}).fg(zz.Color.magenta()));
+        mem.setStyle((zz.Style{}).fg(zz.Color.magenta));
         mem.setInterpolation(.catmull_rom);
         mem.setInterpolationSteps(10);
 
         var backlog = zz.ChartDataset.init(ctx.persistent_allocator, "Backlog") catch unreachable;
-        backlog.setStyle((zz.Style{}).fg(zz.Color.yellow()));
+        backlog.setStyle((zz.Style{}).fg(zz.Color.yellow));
         backlog.setGraphType(.area);
         backlog.setInterpolation(.step_center);
         backlog.setFillBaseline(18.0);
@@ -66,8 +66,8 @@ const Model = struct {
         self.bars.setGap(0);
         self.bars.show_values = false;
         self.bars.label_style = (zz.Style{}).fg(zz.Color.gray(18)).inline_style(true);
-        self.bars.positive_style = (zz.Style{}).fg(zz.Color.green()).inline_style(true);
-        self.bars.negative_style = (zz.Style{}).fg(zz.Color.red()).inline_style(true);
+        self.bars.positive_style = (zz.Style{}).fg(zz.Color.green).inline_style(true);
+        self.bars.negative_style = (zz.Style{}).fg(zz.Color.red).inline_style(true);
         self.bars.axis_style = (zz.Style{}).fg(zz.Color.gray(10)).inline_style(true);
         self.bars.addBar(zz.Bar.init(ctx.persistent_allocator, "api", 31) catch unreachable) catch unreachable;
         self.bars.addBar(zz.Bar.init(ctx.persistent_allocator, "db", -12) catch unreachable) catch unreachable;
@@ -225,7 +225,7 @@ const Model = struct {
         canvas.setRanges(.{ .min = -1.2, .max = 1.2 }, .{ .min = -1.2, .max = 1.2 });
 
         var point_style = zz.Style{};
-        point_style = point_style.fg(zz.Color.yellow());
+        point_style = point_style.fg(zz.Color.yellow);
         point_style = point_style.inline_style(true);
 
         for (0..64) |i| {
@@ -286,7 +286,7 @@ fn box(ctx: *const zz.Context, title: []const u8, body: []const u8) ![]const u8 
 
     var header_style = zz.Style{};
     header_style = header_style.bold(true);
-    header_style = header_style.fg(zz.Color.cyan());
+    header_style = header_style.fg(zz.Color.cyan);
     header_style = header_style.inline_style(true);
     const header = try header_style.render(ctx.allocator, title);
 
@@ -302,7 +302,7 @@ fn inlineStat(ctx: *const zz.Context, label: []const u8, value: []const u8) ![]c
 
     var value_style = zz.Style{};
     value_style = value_style.bold(true);
-    value_style = value_style.fg(zz.Color.white());
+    value_style = value_style.fg(zz.Color.white);
     value_style = value_style.inline_style(true);
     const rendered_value = try value_style.render(ctx.allocator, value);
 

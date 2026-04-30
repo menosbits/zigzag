@@ -102,7 +102,7 @@ const Model = struct {
 
         var focused_label = zz.Style{};
         focused_label = focused_label.bold(true);
-        focused_label = focused_label.fg(zz.Color.cyan());
+        focused_label = focused_label.fg(zz.Color.cyan);
         focused_label = focused_label.inline_style(true);
 
         // Render each field with focus indicator
@@ -135,7 +135,7 @@ const Model = struct {
         const status = if (self.submitted) blk: {
             var success_style = zz.Style{};
             success_style = success_style.bold(true);
-            success_style = success_style.fg(zz.Color.green());
+            success_style = success_style.fg(zz.Color.green);
             success_style = success_style.inline_style(true);
 
             const name_val = self.name_input.getValue();

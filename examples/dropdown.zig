@@ -82,7 +82,7 @@ const Model = struct {
     pub fn view(self: *const Model, ctx: *const zz.Context) []const u8 {
         var title_style = zz.Style{};
         title_style = title_style.bold(true);
-        title_style = title_style.fg(zz.Color.magenta());
+        title_style = title_style.fg(zz.Color.magenta);
         title_style = title_style.inline_style(true);
         const title = title_style.render(ctx.allocator, "Dropdown Example") catch "Dropdown Example";
 
