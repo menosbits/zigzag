@@ -972,11 +972,6 @@ pub const Style = struct {
     }
 };
 
-/// Create a new empty style
-pub fn newStyle() Style {
-    return Style{};
-}
-
 /// Style range for applying different styles to byte ranges
 pub const StyleRange = struct {
     start: usize,

@@ -53,7 +53,7 @@ const Model = struct {
         const w = &result.writer;
 
         // Title
-        const title = zz.newStyle()
+        const title = (zz.Style{})
             .bold(true)
             .fg(.white)
             .inline_style(true)
@@ -99,7 +99,7 @@ const Model = struct {
             w.print("{d:.1}:1   ", .{ratio}) catch {};
 
             // Level badge
-            const badge = zz.newStyle()
+            const badge = (zz.Style{})
                 .fg(level_color)
                 .bold(true)
                 .inline_style(true)
@@ -111,7 +111,7 @@ const Model = struct {
             }
 
             // Sample text with the actual colors
-            const sample = zz.newStyle()
+            const sample = (zz.Style{})
                 .fg(pair.fg)
                 .bg(pair.bg)
                 .inline_style(true)
@@ -138,7 +138,7 @@ const Model = struct {
             },
         };
         const label_text = a11y_label.format(ctx.allocator) catch "?";
-        const label = zz.newStyle()
+        const label = (zz.Style{})
             .fg(.gray(14))
             .inline_style(true)
             .render(ctx.allocator, label_text) catch label_text;
@@ -151,7 +151,7 @@ const Model = struct {
 
         // Help
         w.writeAll("\n") catch {};
-        const help = zz.newStyle()
+        const help = (zz.Style{})
             .fg(.gray(12))
             .inline_style(true)
             .render(ctx.allocator, "Up/Down: select pair | q: quit") catch "";
