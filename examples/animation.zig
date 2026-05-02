@@ -158,7 +158,7 @@ const Model = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    var program = try zz.Program(Model).init(init.gpa);
+    var program = try zz.Program(Model).init(init.gpa, init.io);
     defer program.deinit();
 
     try program.run();

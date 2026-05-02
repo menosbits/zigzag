@@ -6,7 +6,7 @@ const std = @import("std");
 /// Logger that writes timestamped messages to a file
 pub const Logger = struct {
     file: std.fs.File,
-    mutex: std.Thread.Mutex,
+    mutex: std.Io.Mutex,
 
     /// Initialize a logger that writes to the given file path
     pub fn init(path: []const u8) !Logger {

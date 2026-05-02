@@ -140,7 +140,7 @@ const Model = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    var program = try zz.Program(Model).initWithOptions(init.gpa, .{
+    var program = try zz.Program(Model).initWithOptions(init.gpa, init.io, .{
         .mouse = true,
     });
     defer program.deinit();

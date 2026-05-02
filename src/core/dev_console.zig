@@ -63,7 +63,7 @@ pub const SinkConfig = union(enum) {
 pub const DevConsole = struct {
     allocator: std.mem.Allocator,
     sinks: std.array_list.Managed(Sink),
-    mutex: std.Thread.Mutex,
+    mutex: std.Io.Mutex,
     /// Filter: events below this level are dropped.
     min_level: Level,
     /// Whether to prefix each line with a timestamp.
@@ -81,7 +81,7 @@ pub const DevConsole = struct {
         server: std.net.Server,
         thread: std.Thread,
         connections: std.array_list.Managed(std.net.Stream),
-        mutex: std.Thread.Mutex,
+        mutex: std.Io.Mutex,
         /// Set to true to signal the accept thread to stop.
         stopping: std.atomic.Value(bool),
     };

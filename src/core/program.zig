@@ -46,13 +46,17 @@ pub fn Program(comptime Model: type) type {
 
     return struct {
         allocator: std.mem.Allocator,
+        io: std.Io,
         arena: std.heap.ArenaAllocator,
         model: Model,
         terminal: ?Terminal,
         context: Context,
         options: Options,
         running: bool,
-        clock: std.time.Timer,
+        /// Boot-clock epoch from which `start_time`, `last_frame_time`, etc. are measured.
+        /// `.boot` includes time the system was suspended, giving a monotonic reading
+        /// without gaps on resume.
+        clock_epoch: std.Io.Clock.Timestamp,
         start_time: u64,
         last_frame_time: u64,
         pending_tick: ?u64,
@@ -69,17 +73,17 @@ pub fn Program(comptime Model: type) type {
         const Self = @This();
 
         /// Initialize the program
-        pub fn init(allocator: std.mem.Allocator) !Self {
-            return initWithOptions(allocator, .{});
+        pub fn init(allocator: std.mem.Allocator, io: std.Io) !Self {
+            return initWithOptions(allocator, io, .{});
         }
 
         /// Initialize with custom options
-        pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) !Self {
+        pub fn initWithOptions(allocator: std.mem.Allocator, io: std.Io, options: Options) !Self {
             const arena = std.heap.ArenaAllocator.init(allocator);
-            var clock = try std.time.Timer.start();
-            const now = clock.read();
+            const clock_epoch = std.Io.Clock.Timestamp.now(io, .boot);
             const self = Self{
                 .allocator = allocator,
+                .io = io,
                 .arena = arena,
                 .model = undefined,
                 .terminal = null,
@@ -88,9 +92,9 @@ pub fn Program(comptime Model: type) type {
                 .context = Context.init(allocator, allocator),
                 .options = options,
                 .running = false,
-                .clock = clock,
-                .start_time = now,
-                .last_frame_time = now,
+                .clock_epoch = clock_epoch,
+                .start_time = 0,
+                .last_frame_time = 0,
                 .pending_tick = null,
                 .every_interval = null,
                 .last_every_tick = 0,
@@ -187,9 +191,9 @@ pub fn Program(comptime Model: type) type {
             self.context.kitty_text_sizing = width_caps.kitty_text_sizing;
             unicode.setWidthStrategy(effective_width_strategy);
 
-            self.clock.reset();
-            self.start_time = self.clock.read();
-            self.last_frame_time = self.start_time;
+            self.clock_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
+            self.start_time = 0;
+            self.last_frame_time = 0;
             self.context.elapsed = 0;
             self.context.delta = 0;
             self.context.frame = 0;
@@ -210,7 +214,7 @@ pub fn Program(comptime Model: type) type {
 
         /// Execute a single frame: poll input, process events, render.
         pub fn tick(self: *Self) !void {
-            const now = self.clock.read();
+            const now = self.elapsedNs();
             const delta = now - self.last_frame_time;
 
             // Enforce framerate limit
@@ -220,10 +224,10 @@ pub fn Program(comptime Model: type) type {
                 16_666_666; // ~60fps default
 
             if (delta < min_frame_time_ns) {
-                sleepNs(min_frame_time_ns - delta);
+                sleepNs(self.io, min_frame_time_ns - delta);
             }
 
-            const frame_time = self.clock.read();
+            const frame_time = self.elapsedNs();
             const actual_delta = frame_time - self.last_frame_time;
             self.last_frame_time = frame_time;
 
@@ -405,7 +409,7 @@ pub fn Program(comptime Model: type) type {
             }
 
             // Avoid a large post-resume frame delta.
-            self.last_frame_time = self.clock.read();
+            self.last_frame_time = self.elapsedNs();
 
             // Force re-render
             self.last_view_hash = 0;
@@ -742,56 +746,21 @@ pub fn Program(comptime Model: type) type {
             return @intCast(value);
         }
 
-        fn sleepNs(nanoseconds: u64) void {
+        /// Nanoseconds elapsed on the boot clock since `clock_epoch`.
+        fn elapsedNs(self: *const Self) u64 {
+            const dur = self.clock_epoch.untilNow(self.io);
+            const ns = dur.raw.nanoseconds;
+            if (ns <= 0) return 0;
+            return @intCast(ns);
+        }
+
+        fn sleepNs(io: std.Io, nanoseconds: u64) void {
             if (nanoseconds == 0) return;
-            const ns_per_s: u64 = if (@hasDecl(std.time, "ns_per_s")) std.time.ns_per_s else 1_000_000_000;
-            const ns_per_ms: u64 = if (@hasDecl(std.time, "ns_per_ms")) std.time.ns_per_ms else 1_000_000;
-
-            // Zig 0.15 API path.
-            if (@hasDecl(std.Thread, "sleep")) {
-                std.Thread.sleep(nanoseconds);
-                return;
-            }
-
-            // Zig 0.16+ API path.
-            if (@hasDecl(std, "Io")) {
-                const Io = std.Io;
-                if (@hasDecl(Io, "Threaded") and
-                    @hasDecl(Io, "Clock") and
-                    @hasDecl(Io.Clock, "Duration") and
-                    @hasDecl(Io.Clock.Duration, "fromNanoseconds") and
-                    @hasDecl(Io.Clock.Duration, "sleep"))
-                {
-                    var threaded_io: Io.Threaded = .init_single_threaded;
-                    const io = threaded_io.io();
-                    const duration = Io.Clock.Duration.fromNanoseconds(@intCast(nanoseconds));
-                    duration.sleep(io) catch {};
-                    return;
-                }
-            }
-
-            // Fallback for targets/environments where the above are unavailable.
-            if (@hasDecl(std, "os") and @hasDecl(std.os, "windows") and builtin.os.tag == .windows) {
-                const windows = std.os.windows;
-                const big_ms_from_ns = nanoseconds / ns_per_ms;
-                const ms = std.math.cast(windows.DWORD, big_ms_from_ns) orelse std.math.maxInt(windows.DWORD);
-                windows.kernel32.Sleep(ms);
-                return;
-            }
-
-            if (@hasDecl(std, "posix") and @hasDecl(std.posix, "nanosleep")) {
-                const seconds = nanoseconds / ns_per_s;
-                const rem_ns = nanoseconds % ns_per_s;
-                std.posix.nanosleep(seconds, rem_ns);
-                return;
-            }
-
-            // Last resort: spin for the requested duration.
-            var timer = std.time.Timer.start() catch return;
-            const start_ns = timer.read();
-            while (timer.read() - start_ns < nanoseconds) {
-                std.atomic.spinLoopHint();
-            }
+            const duration: std.Io.Clock.Duration = .{
+                .raw = std.Io.Duration.fromNanoseconds(@intCast(nanoseconds)),
+                .clock = .boot,
+            };
+            duration.sleep(io) catch {};
         }
 
         fn resetFrameAllocator(self: *Self) void {

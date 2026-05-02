@@ -185,7 +185,7 @@ const Model = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    var program = try zz.Program(Model).initWithOptions(init.gpa, .{
+    var program = try zz.Program(Model).initWithOptions(init.gpa, init.io, .{
         .title = "ZigZag OSC 52 Clipboard",
         .osc52 = .{
             .enabled = true,
