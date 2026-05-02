@@ -347,10 +347,10 @@ pub const Options = struct {
     title: ?[]const u8 = null,
 
     /// Custom input file (default: stdin)
-    input: ?std.fs.File = null,
+    input: ?std.Io.File = null,
 
     /// Custom output file (default: stdout)
-    output: ?std.fs.File = null,
+    output: ?std.Io.File = null,
 
     /// Log file path for debug output
     log_file: ?[]const u8 = null,

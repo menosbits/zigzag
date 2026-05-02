@@ -249,9 +249,9 @@ pub const Config = struct {
     /// Enable bracketed paste mode
     bracketed_paste: bool = true,
     /// Custom input file (default: stdin)
-    input: ?std.fs.File = null,
+    input: ?std.Io.File = null,
     /// Custom output file (default: stdout)
-    output: ?std.fs.File = null,
+    output: ?std.Io.File = null,
     /// Enable Kitty keyboard protocol
     kitty_keyboard: bool = false,
     /// OSC 52 clipboard configuration
@@ -260,26 +260,28 @@ pub const Config = struct {
 
 /// Terminal abstraction
 pub const Terminal = struct {
+    io: std.Io,
     state: platform.State,
     config: Config,
-    stdin: std.fs.File,
+    stdin: std.Io.File,
     out: Writer,
     pending_input: [8192]u8 = undefined,
     pending_input_len: usize = 0,
     unicode_width_caps: UnicodeWidthCapabilities = .{},
     image_caps: ImageCapabilities = .{},
 
-    pub fn init(config: Config) !Terminal {
+    pub fn init(io: std.Io, config: Config) !Terminal {
         var state = platform.State.init();
 
         var term: Terminal = if (is_wasm) .{
+            .io = io,
             .state = state,
             .config = config,
             .stdin = undefined,
-            .out = .init({}),
+            .out = .init(io, {}),
         } else blk: {
-            const stdout = config.output orelse std.fs.File.stdout();
-            const stdin = config.input orelse std.fs.File.stdin();
+            const stdout = config.output orelse std.Io.File.stdout();
+            const stdin = config.input orelse std.Io.File.stdin();
 
             // Apply custom fd overrides
             if (builtin.os.tag != .windows) {
@@ -291,10 +293,11 @@ pub const Terminal = struct {
             }
 
             break :blk .{
+                .io = io,
                 .state = state,
                 .config = config,
                 .stdin = stdin,
-                .out = .init(stdout),
+                .out = .init(io, stdout),
             };
         };
 
@@ -545,8 +548,8 @@ pub const Terminal = struct {
         var collected = std.array_list.Managed(u8).init(allocator);
         defer collected.deinit();
 
-        const deadline_ms = std.time.milliTimestamp() + timeout_ms;
-        while (std.time.milliTimestamp() < deadline_ms) {
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
+        while (withinDeadline(self.io, start, timeout_ms)) {
             var chunk: [256]u8 = undefined;
             const n = self.readPlatformInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -681,7 +684,7 @@ pub const Terminal = struct {
     /// Transmit an image file to the Kitty cache without displaying it (`a=t,t=f`).
     pub fn transmitKittyImageFromFile(self: *Terminal, path: []const u8, options: KittyTransmitOptions) !bool {
         if (!self.image_caps.kitty_graphics or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         var params_buf: [256]u8 = undefined;
         var params_writer = FixedWriter(&params_buf);
@@ -736,11 +739,11 @@ pub const Terminal = struct {
     /// Returns `false` when unsupported or path is empty.
     pub fn drawIterm2ImageFromFile(self: *Terminal, path: []const u8, options: Iterm2ImageFileOptions) !bool {
         if (!self.image_caps.iterm2_inline_image or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
-        var file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const stat = try file.stat();
+        var file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
+        defer file.close(self.io);
+        const stat = try file.stat(self.io);
 
         var params_buf: [256]u8 = undefined;
         var params_writer = FixedWriter(&params_buf);
@@ -792,7 +795,7 @@ pub const Terminal = struct {
     /// Draw an image file using a specific or auto-selected protocol.
     pub fn drawImageFromFileWithProtocol(self: *Terminal, path: []const u8, options: ImageFileOptions, protocol: ImageProtocol) !bool {
         if (path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         switch (protocol) {
             .kitty => {
@@ -942,11 +945,11 @@ pub const Terminal = struct {
     /// - regular image files converted through `img2sixel` when available.
     pub fn drawSixelFromFile(self: *Terminal, path: []const u8, options: SixelImageFileOptions) !bool {
         if (!self.image_caps.sixel or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         if (isSixelDataPath(path)) {
-            var file = try std.fs.cwd().openFile(path, .{});
-            defer file.close();
+            var file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
+            defer file.close(self.io);
             try self.sendSixelPayloadFromFile(&file);
             return true;
         }
@@ -1243,7 +1246,7 @@ pub const Terminal = struct {
         }
     }
 
-    fn sendIterm2InlineImagePayload(self: *Terminal, params: []const u8, file: *std.fs.File, file_size: u64) !void {
+    fn sendIterm2InlineImagePayload(self: *Terminal, params: []const u8, file: *std.Io.File, file_size: u64) !void {
         const encoder = std.base64.standard.Encoder;
         var raw_buf: [3072]u8 = undefined;
         var b64_buf: [4096]u8 = undefined;
@@ -1256,8 +1259,11 @@ pub const Terminal = struct {
             try self.writeBytes(":");
 
             while (true) {
-                const n = try file.read(&raw_buf);
-                if (n == 0) break;
+                const n = file.readStreaming(self.io, &.{&raw_buf}) catch |err| switch (err) {
+                    error.EndOfStream => break,
+                    else => |e| return e,
+                };
+                if (n == 0) continue;
                 const encoded_len = encoder.calcSize(n);
                 const encoded = encoder.encode(b64_buf[0..encoded_len], raw_buf[0..n]);
                 try self.writeBytes(encoded);
@@ -1272,8 +1278,11 @@ pub const Terminal = struct {
         try self.writeBytes("\x07");
 
         while (true) {
-            const n = try file.read(&raw_buf);
-            if (n == 0) break;
+            const n = file.readStreaming(self.io, &.{&raw_buf}) catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => |e| return e,
+            };
+            if (n == 0) continue;
             const encoded_len = encoder.calcSize(n);
             const encoded = encoder.encode(b64_buf[0..encoded_len], raw_buf[0..n]);
             try self.writeBytes(ansi.OSC ++ "1337;FilePart=");
@@ -1331,14 +1340,17 @@ pub const Terminal = struct {
         try self.writeBytes(ansi.OSC ++ "1337;FileEnd\x07");
     }
 
-    fn sendSixelPayloadFromFile(self: *Terminal, file: *std.fs.File) !void {
+    fn sendSixelPayloadFromFile(self: *Terminal, file: *std.Io.File) !void {
         var payload_buf: [4096]u8 = undefined;
         var first_read = true;
         var wrapped = false;
 
         while (true) {
-            const n = try file.read(&payload_buf);
-            if (n == 0) break;
+            const n = file.readStreaming(self.io, &.{&payload_buf}) catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => |e| return e,
+            };
+            if (n == 0) continue;
             const chunk = payload_buf[0..n];
 
             if (first_read) {
@@ -1376,9 +1388,9 @@ pub const Terminal = struct {
 
         var collected: [1024]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 180;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 180)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -1430,9 +1442,9 @@ pub const Terminal = struct {
 
         var collected: [2048]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 180;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 180)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -1470,9 +1482,9 @@ pub const Terminal = struct {
 
         var collected: [1024]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 120;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 120)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 25) catch 0;
             if (n == 0) continue;
@@ -1531,9 +1543,9 @@ pub const Terminal = struct {
 
         var collected: [512]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 250;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 250)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 40) catch 0;
             if (n == 0) continue;
@@ -1613,9 +1625,9 @@ pub const Terminal = struct {
 
         var buf: [512]u8 = undefined;
         var len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 250;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 250)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 40) catch 0;
             if (n == 0) continue;
@@ -1762,9 +1774,15 @@ pub const Terminal = struct {
             std.mem.endsWith(u8, path, ".SIX");
     }
 
-    fn fileExists(path: []const u8) bool {
-        std.fs.cwd().access(path, .{}) catch return false;
+    fn fileExists(io: std.Io, path: []const u8) bool {
+        std.Io.Dir.cwd().access(io, path, .{}) catch return false;
         return true;
+    }
+
+    fn withinDeadline(io: std.Io, start: std.Io.Clock.Timestamp, timeout_ms: u64) bool {
+        const elapsed_ns = start.untilNow(io).raw.nanoseconds;
+        const deadline_ns: i96 = @as(i96, @intCast(timeout_ms)) * std.time.ns_per_ms;
+        return elapsed_ns < deadline_ns;
     }
 
     fn commandExists(name: []const u8) bool {
@@ -1800,14 +1818,16 @@ pub const Terminal = struct {
     /// Buffered writer that exposes a `std.Io.Writer` interface and drains to
     /// the terminal's output sink (stdout file, or the wasm host on wasm).
     pub const Writer = struct {
-        file: if (is_wasm) void else std.fs.File,
+        io: std.Io,
+        file: if (is_wasm) void else std.Io.File,
         buffer: [4096]u8 = undefined,
         writer: std.Io.Writer,
 
         const vtable: std.Io.Writer.VTable = .{ .drain = drain };
 
-        pub fn init(file: if (is_wasm) void else std.fs.File) Writer {
+        pub fn init(io: std.Io, file: if (is_wasm) void else std.Io.File) Writer {
             return .{
+                .io = io,
                 .file = file,
                 .writer = .{ .vtable = &vtable, .buffer = &.{} },
             };
@@ -1858,7 +1878,7 @@ pub const Terminal = struct {
             if (is_wasm) {
                 try platform.wasm_writer_instance.writer.writeAll(bytes);
             } else {
-                self.file.writeAll(bytes) catch return error.WriteFailed;
+                self.file.writeStreamingAll(self.io, bytes) catch return error.WriteFailed;
             }
         }
     };

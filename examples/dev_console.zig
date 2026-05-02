@@ -100,7 +100,7 @@ const Model = struct {
 };
 
 pub fn main(init: std.process.Init) !void {
-    console = zz.DevConsole.init(init.gpa);
+    console = zz.DevConsole.init(init.gpa, init.io);
     defer console.deinit();
     try console.addSink(.{ .file = "dev_console.log" });
     try console.addSink(.{ .tcp = .{ .host = "127.0.0.1", .port = 7878 } });

@@ -155,14 +155,14 @@ pub fn Program(comptime Model: type) type {
         pub fn start(self: *Self) !void {
             // Initialize logger if configured
             if (self.options.log_file) |log_path| {
-                self.logger = Logger.init(log_path) catch null;
+                self.logger = Logger.init(self.io, log_path) catch null;
                 if (self.logger != null) {
                     self.context._logger = &self.logger.?;
                 }
             }
 
             // Initialize terminal
-            self.terminal = try Terminal.init(.{
+            self.terminal = try Terminal.init(self.io, .{
                 .alt_screen = self.options.alt_screen,
                 .hide_cursor = !self.options.cursor,
                 .mouse = self.options.mouse,
