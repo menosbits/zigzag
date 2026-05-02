@@ -99,16 +99,13 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    console = zz.DevConsole.init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    console = zz.DevConsole.init(init.gpa);
     defer console.deinit();
     try console.addSink(.{ .file = "dev_console.log" });
     try console.addSink(.{ .tcp = .{ .host = "127.0.0.1", .port = 7878 } });
 
-    var program = try zz.Program(Model).init(gpa.allocator());
+    var program = try zz.Program(Model).init(init.gpa);
     defer program.deinit();
 
     try program.run();

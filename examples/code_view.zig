@@ -7,11 +7,8 @@ const zz = @import("zigzag");
 const zig_source =
     \\const std = @import("std");
     \\
-    \\pub fn main() !void {
-    \\    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    \\    defer _ = gpa.deinit();
-    \\
-    \\    const allocator = gpa.allocator();
+    \\pub fn main(init: std.process.Init) !void {
+    \\    const allocator = init.gpa;
     \\    var list = std.std.array_list.Managed(u32).init(allocator);
     \\    defer list.deinit();
     \\
@@ -115,11 +112,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa);
     defer program.deinit();
 
     try program.run();
