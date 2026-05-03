@@ -54,11 +54,10 @@ pub fn Program(comptime Model: type) type {
         context: Context,
         options: Options,
         running: bool,
-        /// Boot-clock epoch from which `start_time`, `last_frame_time`, etc. are measured.
+        /// Boot-clock epoch from which `last_frame_time` and `context.elapsed` are measured.
         /// `.boot` includes time the system was suspended, giving a monotonic reading
         /// without gaps on resume.
         clock_epoch: std.Io.Clock.Timestamp,
-        start_time: u64,
         last_frame_time: u64,
         pending_tick: ?u64,
         every_interval: ?u64,
@@ -104,7 +103,6 @@ pub fn Program(comptime Model: type) type {
                 .options = options,
                 .running = false,
                 .clock_epoch = clock_epoch,
-                .start_time = 0,
                 .last_frame_time = 0,
                 .pending_tick = null,
                 .every_interval = null,
@@ -203,7 +201,6 @@ pub fn Program(comptime Model: type) type {
             unicode.setWidthStrategy(effective_width_strategy);
 
             self.clock_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
-            self.start_time = 0;
             self.last_frame_time = 0;
             self.context.elapsed = 0;
             self.context.delta = 0;
@@ -243,7 +240,7 @@ pub fn Program(comptime Model: type) type {
             self.last_frame_time = frame_time;
 
             self.context.delta = actual_delta;
-            self.context.elapsed = frame_time - self.start_time;
+            self.context.elapsed = frame_time;
             self.context.frame += 1;
 
             self.resetFrameAllocator();

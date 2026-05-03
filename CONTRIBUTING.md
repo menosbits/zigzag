@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ZigZag! This document provides gu
 
 ### Prerequisites
 
-- [Zig](https://ziglang.org/download/) 0.15.0 or later, it needs to be compatible with the latest version
+- [Zig](https://ziglang.org/download/) 0.16.0 or later, it needs to be compatible with the latest version
 - Git
 
 ### Setup

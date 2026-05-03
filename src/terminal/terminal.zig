@@ -1282,7 +1282,7 @@ pub const Terminal = struct {
                 error.EndOfStream => break,
                 else => |e| return e,
             };
-            if (n == 0) continue;
+            if (n == 0) break;
             const encoded_len = encoder.calcSize(n);
             const encoded = encoder.encode(b64_buf[0..encoded_len], raw_buf[0..n]);
             try self.writeBytes(ansi.OSC ++ "1337;FilePart=");
@@ -1350,7 +1350,7 @@ pub const Terminal = struct {
                 error.EndOfStream => break,
                 else => |e| return e,
             };
-            if (n == 0) continue;
+            if (n == 0) break;
             const chunk = payload_buf[0..n];
 
             if (first_read) {
