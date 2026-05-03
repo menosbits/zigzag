@@ -29,7 +29,7 @@ const Model = struct {
         return .none;
     }
 
-    pub fn update(self: *Model, msg: Msg, _: *zz.Context) zz.Cmd(Msg) {
+    pub fn update(self: *Model, msg: Msg, ctx: *zz.Context) zz.Cmd(Msg) {
         switch (msg) {
             .key => |k| switch (k.key) {
                 .char => |c| switch (c) {
@@ -40,9 +40,9 @@ const Model = struct {
                         if (self.tasks_launched != 0) return .none;
                         self.status = "Tasks running...";
                         self.results = .{ "pending...", "pending...", "pending..." };
-                        _ = self.async_runner.spawn(&task1);
-                        _ = self.async_runner.spawn(&task2);
-                        _ = self.async_runner.spawn(&task3);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task1);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task2);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task3);
                         self.tasks_launched = 3;
                         return zz.Cmd(Msg).everyMs(100);
                     },
@@ -80,26 +80,26 @@ const Model = struct {
         return .none;
     }
 
-    fn sleepNs(ns: u64) void {
+    fn sleepNs(io: std.Io, ns: u64) void {
         const duration: std.Io.Clock.Duration = .{
             .raw = std.Io.Duration.fromNanoseconds(@intCast(ns)),
             .clock = .boot,
         };
-        duration.sleep(std.Io.Threaded.global_single_threaded.io()) catch {};
+        duration.sleep(io) catch {};
     }
 
-    fn task1() ?Msg {
-        sleepNs(500_000_000); // 500ms
+    fn task1(io: std.Io) ?Msg {
+        sleepNs(io, 500_000_000); // 500ms
         return .{ .task_complete = .{ .id = 0, .value = "Task 1: computed pi = 3.14159" } };
     }
 
-    fn task2() ?Msg {
-        sleepNs(1_000_000_000); // 1s
+    fn task2(io: std.Io) ?Msg {
+        sleepNs(io, 1_000_000_000); // 1s
         return .{ .task_complete = .{ .id = 1, .value = "Task 2: fetched 42 records" } };
     }
 
-    fn task3() ?Msg {
-        sleepNs(750_000_000); // 750ms
+    fn task3(io: std.Io) ?Msg {
+        sleepNs(io, 750_000_000); // 750ms
         return .{ .task_complete = .{ .id = 2, .value = "Task 3: file processed OK" } };
     }
 

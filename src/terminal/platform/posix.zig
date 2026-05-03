@@ -39,6 +39,8 @@ pub const State = struct {
 };
 
 /// Check if a file descriptor is a TTY by probing for terminal window size.
+/// Replaces `posix.isatty`, which was removed in Zig 0.16; a successful
+/// `TIOCGWINSZ` ioctl is only granted to terminal devices.
 pub fn isTty(fd: posix.fd_t) bool {
     var wsz: posix.winsize = undefined;
     return posix.system.ioctl(fd, posix.T.IOCGWINSZ, @intFromPtr(&wsz)) == 0;

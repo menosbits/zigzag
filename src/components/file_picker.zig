@@ -171,7 +171,7 @@ pub const FilePicker = struct {
             // Check extensions if specified
             if (self.allowed_extensions) |exts| {
                 if (entry.kind != .directory) {
-                    const ext = std.Io.Dir.path.extension(entry.name);
+                    const ext = std.fs.path.extension(entry.name);
                     var found = false;
                     for (exts) |allowed_ext| {
                         if (std.mem.eql(u8, ext, allowed_ext)) {
@@ -261,12 +261,12 @@ pub const FilePicker = struct {
         if (entry.entry_type == .directory or entry.entry_type == .parent) {
             // Navigate into directory
             if (entry.entry_type == .parent) {
-                const parent = std.Io.Dir.path.dirname(self.current_path.items) orelse "/";
+                const parent = std.fs.path.dirname(self.current_path.items) orelse "/";
                 const parent_copy = try self.allocator.dupe(u8, parent);
                 defer self.allocator.free(parent_copy);
                 try self.navigate(io, parent_copy);
             } else {
-                const new_path = try std.Io.Dir.path.join(self.allocator, &.{ self.current_path.items, entry.name });
+                const new_path = try std.fs.path.join(self.allocator, &.{ self.current_path.items, entry.name });
                 defer self.allocator.free(new_path);
                 try self.navigate(io, new_path);
             }
@@ -276,7 +276,7 @@ pub const FilePicker = struct {
             if (self.selected_path) |path| {
                 self.allocator.free(path);
             }
-            self.selected_path = try std.Io.Dir.path.join(self.allocator, &.{ self.current_path.items, entry.name });
+            self.selected_path = try std.fs.path.join(self.allocator, &.{ self.current_path.items, entry.name });
             return true;
         }
     }
@@ -304,7 +304,7 @@ pub const FilePicker = struct {
             .down => self.cursorDown(),
             .enter => return try self.selectCurrent(io),
             .backspace => {
-                const parent = std.Io.Dir.path.dirname(self.current_path.items) orelse "/";
+                const parent = std.fs.path.dirname(self.current_path.items) orelse "/";
                 const parent_copy = try self.allocator.dupe(u8, parent);
                 defer self.allocator.free(parent_copy);
                 try self.navigate(io, parent_copy);

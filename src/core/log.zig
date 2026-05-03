@@ -7,6 +7,10 @@ const std = @import("std");
 pub const Logger = struct {
     io: std.Io,
     file: std.Io.File,
+    /// Append cursor. Only advanced after a successful flush — a failed write
+    /// leaves it pointing at where the truncated record started, so the next
+    /// log line will overwrite the partial one. Acceptable for a debug logger;
+    /// not safe under concurrent writers to the same file.
     end_pos: u64,
     mutex: std.Io.Mutex,
 

@@ -73,6 +73,10 @@ pub const DevConsole = struct {
     const Sink = union(enum) {
         file: struct {
             file: std.Io.File,
+            /// Append cursor. Only advanced after a successful flush — a failed
+            /// write leaves it pointing at the truncated record's start, so the
+            /// next entry overwrites the partial one. Not safe under concurrent
+            /// writers to the same file.
             end_pos: u64,
         },
         tcp: *TcpSink,
