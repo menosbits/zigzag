@@ -208,7 +208,7 @@ test "Toast constrains long messages to configured width" {
 }
 
 fn rightEdgeDisplay(line: []const u8) usize {
-    const trimmed = std.mem.trimRight(u8, line, " ");
+    const trimmed = std.mem.trimEnd(u8, line, " ");
     return zz.measure.width(trimmed);
 }
 

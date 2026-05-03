@@ -18,8 +18,8 @@ const Model = struct {
         self.file_picker.height = ctx.height -| 10;
 
         // Start at home directory
-        self.file_picker.navigateHome() catch {
-            self.file_picker.navigate("/") catch {};
+        self.file_picker.navigateHome(ctx.io, ctx.environ_map) catch {
+            self.file_picker.navigate(ctx.io, "/") catch {};
         };
 
         self.preview = std.array_list.Managed(u8).init(ctx.persistent_allocator);
@@ -34,17 +34,17 @@ const Model = struct {
                     .char => |c| switch (c) {
                         'q' => return .quit,
                         else => {
-                            const selected = self.file_picker.handleKey(k) catch false;
+                            const selected = self.file_picker.handleKey(ctx.io, ctx.environ_map, k) catch false;
                             if (selected) {
-                                self.loadPreview();
+                                self.loadPreview(ctx.io);
                             }
                         },
                     },
                     .escape => return .quit,
                     else => {
-                        const selected = self.file_picker.handleKey(k) catch false;
+                        const selected = self.file_picker.handleKey(ctx.io, ctx.environ_map, k) catch false;
                         if (selected) {
-                            self.loadPreview();
+                            self.loadPreview(ctx.io);
                         }
                     },
                 }
@@ -56,22 +56,25 @@ const Model = struct {
         return .none;
     }
 
-    fn loadPreview(self: *Model) void {
+    fn loadPreview(self: *Model, io: std.Io) void {
         if (self.file_picker.getSelected()) |path| {
             // Try to read file preview
-            const file = std.fs.openFileAbsolute(path, .{}) catch {
+            const file = std.Io.Dir.openFileAbsolute(io, path, .{}) catch {
                 self.error_message = "Cannot open file";
                 self.preview.clearRetainingCapacity();
                 return;
             };
-            defer file.close();
+            defer file.close(io);
 
             // Read first 500 bytes
             var buf: [500]u8 = undefined;
-            const bytes_read = file.read(&buf) catch {
-                self.error_message = "Cannot read file";
-                self.preview.clearRetainingCapacity();
-                return;
+            const bytes_read = file.readStreaming(io, &.{&buf}) catch |err| switch (err) {
+                error.EndOfStream => 0,
+                else => {
+                    self.error_message = "Cannot read file";
+                    self.preview.clearRetainingCapacity();
+                    return;
+                },
             };
 
             self.preview.clearRetainingCapacity();

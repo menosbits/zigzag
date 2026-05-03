@@ -80,18 +80,26 @@ const Model = struct {
         return .none;
     }
 
+    fn sleepNs(ns: u64) void {
+        const duration: std.Io.Clock.Duration = .{
+            .raw = std.Io.Duration.fromNanoseconds(@intCast(ns)),
+            .clock = .boot,
+        };
+        duration.sleep(std.Io.Threaded.global_single_threaded.io()) catch {};
+    }
+
     fn task1() ?Msg {
-        std.Thread.sleep(500_000_000); // 500ms
+        sleepNs(500_000_000); // 500ms
         return .{ .task_complete = .{ .id = 0, .value = "Task 1: computed pi = 3.14159" } };
     }
 
     fn task2() ?Msg {
-        std.Thread.sleep(1_000_000_000); // 1s
+        sleepNs(1_000_000_000); // 1s
         return .{ .task_complete = .{ .id = 1, .value = "Task 2: fetched 42 records" } };
     }
 
     fn task3() ?Msg {
-        std.Thread.sleep(750_000_000); // 750ms
+        sleepNs(750_000_000); // 750ms
         return .{ .task_complete = .{ .id = 2, .value = "Task 3: file processed OK" } };
     }
 

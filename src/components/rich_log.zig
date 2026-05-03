@@ -47,7 +47,7 @@ pub const Level = enum {
 
 pub const Entry = struct {
     level: Level,
-    /// Unix nanoseconds, populated by `append` from `std.time.nanoTimestamp()`.
+    /// Unix nanoseconds, populated by `append` from `std.Io.Timestamp.now(io, .real)`.
     timestamp_ns: i128,
     text: []u8,
 };
@@ -165,7 +165,7 @@ pub const RichLog = struct {
     }
 
     /// Append an entry, dropping the oldest if at capacity.
-    pub fn append(self: *RichLog, level: Level, text: []const u8) !void {
+    pub fn append(self: *RichLog, io: std.Io, level: Level, text: []const u8) !void {
         const owned = try self.allocator.dupe(u8, text);
         if (self.entries.items.len >= self.capacity) {
             const oldest = self.entries.orderedRemove(0);
@@ -173,7 +173,7 @@ pub const RichLog = struct {
         }
         try self.entries.append(.{
             .level = level,
-            .timestamp_ns = std.time.nanoTimestamp(),
+            .timestamp_ns = std.Io.Timestamp.now(io, .real).toNanoseconds(),
             .text = owned,
         });
         self.visible_dirty = true;
@@ -181,10 +181,10 @@ pub const RichLog = struct {
     }
 
     /// Append using std.fmt-style formatting.
-    pub fn appendFmt(self: *RichLog, level: Level, comptime fmt: []const u8, args: anytype) !void {
+    pub fn appendFmt(self: *RichLog, io: std.Io, level: Level, comptime fmt: []const u8, args: anytype) !void {
         const formatted = try std.fmt.allocPrint(self.allocator, fmt, args);
         defer self.allocator.free(formatted);
-        try self.append(level, formatted);
+        try self.append(io, level, formatted);
     }
 
     pub fn clear(self: *RichLog) void {
@@ -349,10 +349,10 @@ test "append respects capacity" {
     const allocator = std.testing.allocator;
     var log = RichLog.init(allocator, 3);
     defer log.deinit();
-    try log.append(.info, "a");
-    try log.append(.info, "b");
-    try log.append(.info, "c");
-    try log.append(.info, "d");
+    try log.append(std.testing.io, .info, "a");
+    try log.append(std.testing.io, .info, "b");
+    try log.append(std.testing.io, .info, "c");
+    try log.append(std.testing.io, .info, "d");
     try std.testing.expectEqual(@as(usize, 3), log.entries.items.len);
     try std.testing.expectEqualStrings("b", log.entries.items[0].text);
     try std.testing.expectEqualStrings("d", log.entries.items[2].text);
@@ -362,8 +362,8 @@ test "min level filters entries" {
     const allocator = std.testing.allocator;
     var log = RichLog.init(allocator, 100);
     defer log.deinit();
-    try log.append(.debug, "noise");
-    try log.append(.warn, "important");
+    try log.append(std.testing.io, .debug, "noise");
+    try log.append(std.testing.io, .warn, "important");
     log.setMinLevel(.warn);
     try log.refresh();
     try std.testing.expectEqual(@as(usize, 1), log.visible.items.len);
@@ -373,8 +373,8 @@ test "search filter matches substring" {
     const allocator = std.testing.allocator;
     var log = RichLog.init(allocator, 10);
     defer log.deinit();
-    try log.append(.info, "hello world");
-    try log.append(.info, "goodbye");
+    try log.append(std.testing.io, .info, "hello world");
+    try log.append(std.testing.io, .info, "goodbye");
     try log.setSearch("hello");
     try log.refresh();
     try std.testing.expectEqual(@as(usize, 1), log.visible.items.len);
@@ -387,7 +387,7 @@ test "follow mode auto-scrolls" {
     log.setSize(80, 2);
     var i: usize = 0;
     while (i < 5) : (i += 1) {
-        try log.appendFmt(.info, "line {d}", .{i});
+        try log.appendFmt(std.testing.io, .info, "line {d}", .{i});
     }
     try log.refresh();
     // Last two entries should fit; offset should be 3.
@@ -398,7 +398,7 @@ test "scrollUp disables follow" {
     const allocator = std.testing.allocator;
     var log = RichLog.init(allocator, 100);
     defer log.deinit();
-    try log.append(.info, "a");
+    try log.append(std.testing.io, .info, "a");
     log.scrollUp(1);
     try std.testing.expect(!log.follow);
 }
@@ -410,7 +410,7 @@ test "view emits at most height lines" {
     log.setSize(80, 3);
     var i: usize = 0;
     while (i < 10) : (i += 1) {
-        try log.appendFmt(.info, "line {d}", .{i});
+        try log.appendFmt(std.testing.io, .info, "line {d}", .{i});
     }
     const out = try log.view(allocator);
     defer allocator.free(out);

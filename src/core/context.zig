@@ -21,6 +21,9 @@ pub const Context = struct {
     /// Process environment for env-driven detection (color, multiplexer, locale).
     environ_map: *const std.process.Environ.Map,
 
+    /// Asynchronous I/O facilities (file, network, time, sleep).
+    io: std.Io,
+
     /// Terminal width in columns
     width: u16,
 
@@ -76,12 +79,14 @@ pub const Context = struct {
     pub fn init(
         allocator: std.mem.Allocator,
         persistent_allocator: std.mem.Allocator,
+        io: std.Io,
         environ_map: *const std.process.Environ.Map,
     ) Context {
         const profile = color_mod.ColorProfile.detect(environ_map);
         return .{
             .allocator = allocator,
             .persistent_allocator = persistent_allocator,
+            .io = io,
             .environ_map = environ_map,
             .width = 80,
             .height = 24,

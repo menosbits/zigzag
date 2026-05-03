@@ -552,7 +552,7 @@ pub const Terminal = struct {
         defer collected.deinit();
 
         const start = std.Io.Clock.Timestamp.now(self.io, .boot);
-        while (withinDeadline(self.io, start, timeout_ms)) {
+        while (withinDeadline(self.io, start, @intCast(@max(timeout_ms, 0)))) {
             var chunk: [256]u8 = undefined;
             const n = self.readPlatformInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -957,7 +957,7 @@ pub const Terminal = struct {
             return true;
         }
 
-        if (!commandExists("img2sixel")) return false;
+        if (!commandExists(self.io, "img2sixel")) return false;
 
         var argv_buf: [6][]const u8 = undefined;
         var argc: usize = 0;
@@ -980,16 +980,16 @@ pub const Terminal = struct {
         argv_buf[argc] = path;
         argc += 1;
 
-        const result = try std.process.Child.run(.{
-            .allocator = std.heap.page_allocator,
+        const result = try std.process.run(std.heap.page_allocator, self.io, .{
             .argv = argv_buf[0..argc],
-            .max_output_bytes = options.max_output_bytes,
+            .stdout_limit = .limited(options.max_output_bytes),
+            .stderr_limit = .limited(options.max_output_bytes),
         });
         defer std.heap.page_allocator.free(result.stdout);
         defer std.heap.page_allocator.free(result.stderr);
 
         switch (result.term) {
-            .Exited => |code| if (code != 0) return error.BrokenPipe,
+            .exited => |code| if (code != 0) return error.BrokenPipe,
             else => return error.BrokenPipe,
         }
 
@@ -1785,12 +1785,12 @@ pub const Terminal = struct {
         return elapsed_ns < deadline_ns;
     }
 
-    fn commandExists(name: []const u8) bool {
+    fn commandExists(io: std.Io, name: []const u8) bool {
         const argv = [_][]const u8{ name, "--version" };
-        const result = std.process.Child.run(.{
-            .allocator = std.heap.page_allocator,
+        const result = std.process.run(std.heap.page_allocator, io, .{
             .argv = &argv,
-            .max_output_bytes = 1024,
+            .stdout_limit = .limited(1024),
+            .stderr_limit = .limited(1024),
         }) catch return false;
         defer std.heap.page_allocator.free(result.stdout);
         defer std.heap.page_allocator.free(result.stderr);

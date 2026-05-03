@@ -38,9 +38,10 @@ pub const State = struct {
     }
 };
 
-/// Check if a file descriptor is a TTY
+/// Check if a file descriptor is a TTY by probing for terminal window size.
 pub fn isTty(fd: posix.fd_t) bool {
-    return posix.isatty(fd);
+    var wsz: posix.winsize = undefined;
+    return posix.system.ioctl(fd, posix.T.IOCGWINSZ, @intFromPtr(&wsz)) == 0;
 }
 
 /// Get terminal size using ioctl (falls back to 80x24 for non-TTY)

@@ -100,7 +100,7 @@ pub fn Program(comptime Model: type) type {
                 .terminal = null,
                 // `self` is returned by value, so don't capture an arena allocator here.
                 // It would point at this function's stack copy and dangle after return.
-                .context = Context.init(allocator, allocator, environ_map),
+                .context = Context.init(allocator, allocator, io, environ_map),
                 .options = options,
                 .running = false,
                 .clock_epoch = clock_epoch,

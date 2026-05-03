@@ -142,7 +142,7 @@ test "KeyEvent format" {
     var buf: Writer.Allocating = .init(allocator);
     defer buf.deinit();
 
-    try event.format("", .{}, &buf.writer);
+    try event.format(&buf.writer);
     try testing.expectEqualStrings("ctrl+a", buf.written());
 }
 

@@ -139,7 +139,7 @@ pub const Markdown = struct {
             first_line = false;
 
             // Code block toggle
-            if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " "), "```")) {
+            if (std.mem.startsWith(u8, std.mem.trimStart(u8, line, " "), "```")) {
                 in_code_block = !in_code_block;
                 if (in_code_block) {
                     // Opening fence
@@ -173,7 +173,7 @@ pub const Markdown = struct {
                 continue;
             }
 
-            const trimmed = std.mem.trimLeft(u8, line, " ");
+            const trimmed = std.mem.trimStart(u8, line, " ");
 
             // Horizontal rule
             if (trimmed.len >= 3 and isAllChar(trimmed, '-')) {
