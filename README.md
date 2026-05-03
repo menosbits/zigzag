@@ -80,11 +80,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}).init;
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
     try program.run();
 }
@@ -180,7 +177,7 @@ const output = try style.render(allocator, "Hello, World!");
 // render() does not append an implicit trailing '\n'
 
 // Text transforms
-const upper_style = (zz.Style{}).transform(.uppercase);
+const upper_style = (zz.Style{}).transform(zz.transforms.uppercase); // Pass a function to perform transformations
 const shouting = try upper_style.render(allocator, "hello"); // "HELLO"
 
 // Inline mode is useful when embedding block-styled output in a single line
@@ -886,7 +883,7 @@ const fs = zz.FocusStyle{
 Configure the program with custom options:
 
 ```zig
-var program = try zz.Program(Model).initWithOptions(gpa.allocator(), .{
+var program = try zz.Program(Model).initWithOptions(init.gpa, init.io, init.environ_map, .{
     .fps = 60,                  // Target frame rate
     .alt_screen = true,         // Use alternate screen buffer
     .mouse = false,             // Enable mouse tracking
@@ -931,7 +928,7 @@ For model state that must live across frames, allocate with `ctx.persistent_allo
 For applications that need to do other work between frames (network polling, background processing, etc.), use `start()` + `tick()` instead of `run()`:
 
 ```zig
-var program = try zz.Program(Model).init(gpa.allocator());
+var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
 defer program.deinit();
 
 try program.start();
@@ -958,7 +955,7 @@ pub fn update(self: *Model, msg: Msg, ctx: *zz.Context) zz.Cmd(Msg) {
 Intercept and transform messages before they reach your model:
 
 ```zig
-var program = try zz.Program(Model).init(gpa.allocator());
+var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
 program.setFilter(&myFilter);
 
 fn myFilter(msg: Model.Msg) ?Model.Msg {
