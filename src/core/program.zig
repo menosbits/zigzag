@@ -763,11 +763,7 @@ pub fn Program(comptime Model: type) type {
 
         fn sleepNs(io: std.Io, nanoseconds: u64) void {
             if (nanoseconds == 0) return;
-            const duration: std.Io.Clock.Duration = .{
-                .raw = std.Io.Duration.fromNanoseconds(@intCast(nanoseconds)),
-                .clock = .boot,
-            };
-            duration.sleep(io) catch {};
+            std.Io.sleep(io, .fromNanoseconds(nanoseconds), .boot) catch unreachable;
         }
 
         fn resetFrameAllocator(self: *Self) void {

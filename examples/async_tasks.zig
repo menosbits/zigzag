@@ -89,17 +89,17 @@ const Model = struct {
     }
 
     fn task1(io: std.Io) ?Msg {
-        sleepNs(io, 500_000_000); // 500ms
+        std.Io.sleep(io, .fromMilliseconds(500), .boot) catch unreachable; // 500ms
         return .{ .task_complete = .{ .id = 0, .value = "Task 1: computed pi = 3.14159" } };
     }
 
     fn task2(io: std.Io) ?Msg {
-        sleepNs(io, 1_000_000_000); // 1s
+        std.Io.sleep(io, .fromMilliseconds(1000), .boot) catch unreachable; // 1s
         return .{ .task_complete = .{ .id = 1, .value = "Task 2: fetched 42 records" } };
     }
 
     fn task3(io: std.Io) ?Msg {
-        sleepNs(io, 750_000_000); // 750ms
+        std.Io.sleep(io, .fromMilliseconds(750), .boot) catch unreachable; // 750ms
         return .{ .task_complete = .{ .id = 2, .value = "Task 3: file processed OK" } };
     }
 
@@ -121,7 +121,8 @@ const Model = struct {
         box_s = box_s.paddingAll(1);
         box_s = box_s.width(45);
 
-        const results_text = std.fmt.allocPrint(alloc,
+        const results_text = std.fmt.allocPrint(
+            alloc,
             "1: {s}\n2: {s}\n3: {s}",
             .{ self.results[0], self.results[1], self.results[2] },
         ) catch "";
@@ -130,7 +131,8 @@ const Model = struct {
         help_s = help_s.fg(zz.Color.gray(10));
         help_s = help_s.inline_style(true);
 
-        const content = std.fmt.allocPrint(alloc,
+        const content = std.fmt.allocPrint(
+            alloc,
             "{s}\n\n{s}\n\n{s}\n\n{s}",
             .{
                 title_s.render(alloc, "Async Tasks Demo") catch "Async Tasks",

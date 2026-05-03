@@ -68,13 +68,10 @@ const Model = struct {
 
             // Read first 500 bytes
             var buf: [500]u8 = undefined;
-            const bytes_read = file.readStreaming(io, &.{&buf}) catch |err| switch (err) {
-                error.EndOfStream => 0,
-                else => {
-                    self.error_message = "Cannot read file";
-                    self.preview.clearRetainingCapacity();
-                    return;
-                },
+            const bytes_read = file.readPositionalAll(io, &buf, 0) catch {
+                self.error_message = "Cannot read file";
+                self.preview.clearRetainingCapacity();
+                return;
             };
 
             self.preview.clearRetainingCapacity();

@@ -177,7 +177,7 @@ const output = try style.render(allocator, "Hello, World!");
 // render() does not append an implicit trailing '\n'
 
 // Text transforms
-const upper_style = (zz.Style{}).transform(zz.transforms.uppercase); // Pass a function to perform transformations
+const upper_style = (zz.Style{}).transform(.uppercase);
 const shouting = try upper_style.render(allocator, "hello"); // "HELLO"
 
 // Inline mode is useful when embedding block-styled output in a single line
