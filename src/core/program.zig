@@ -47,6 +47,7 @@ pub fn Program(comptime Model: type) type {
     return struct {
         allocator: std.mem.Allocator,
         io: std.Io,
+        environ_map: *const std.process.Environ.Map,
         arena: std.heap.ArenaAllocator,
         model: Model,
         terminal: ?Terminal,
@@ -73,23 +74,33 @@ pub fn Program(comptime Model: type) type {
         const Self = @This();
 
         /// Initialize the program
-        pub fn init(allocator: std.mem.Allocator, io: std.Io) !Self {
-            return initWithOptions(allocator, io, .{});
+        pub fn init(
+            allocator: std.mem.Allocator,
+            io: std.Io,
+            environ_map: *const std.process.Environ.Map,
+        ) !Self {
+            return initWithOptions(allocator, io, environ_map, .{});
         }
 
         /// Initialize with custom options
-        pub fn initWithOptions(allocator: std.mem.Allocator, io: std.Io, options: Options) !Self {
+        pub fn initWithOptions(
+            allocator: std.mem.Allocator,
+            io: std.Io,
+            environ_map: *const std.process.Environ.Map,
+            options: Options,
+        ) !Self {
             const arena = std.heap.ArenaAllocator.init(allocator);
             const clock_epoch = std.Io.Clock.Timestamp.now(io, .boot);
             const self = Self{
                 .allocator = allocator,
                 .io = io,
+                .environ_map = environ_map,
                 .arena = arena,
                 .model = undefined,
                 .terminal = null,
                 // `self` is returned by value, so don't capture an arena allocator here.
                 // It would point at this function's stack copy and dangle after return.
-                .context = Context.init(allocator, allocator),
+                .context = Context.init(allocator, allocator, environ_map),
                 .options = options,
                 .running = false,
                 .clock_epoch = clock_epoch,
@@ -162,7 +173,7 @@ pub fn Program(comptime Model: type) type {
             }
 
             // Initialize terminal
-            self.terminal = try Terminal.init(self.io, .{
+            self.terminal = try Terminal.init(self.io, self.environ_map, .{
                 .alt_screen = self.options.alt_screen,
                 .hide_cursor = !self.options.cursor,
                 .mouse = self.options.mouse,
@@ -364,15 +375,14 @@ pub fn Program(comptime Model: type) type {
             if (self.options.unicode_width_strategy) |forced| {
                 return forced;
             }
-            if (envUnicodeWidthOverride()) |from_env| {
+            if (envUnicodeWidthOverride(self.environ_map)) |from_env| {
                 return from_env;
             }
             return detected;
         }
 
-        fn envUnicodeWidthOverride() ?unicode.WidthStrategy {
-            const raw = std.process.getEnvVarOwned(std.heap.page_allocator, "ZZ_UNICODE_WIDTH") catch return null;
-            defer std.heap.page_allocator.free(raw);
+        fn envUnicodeWidthOverride(environ_map: *const std.process.Environ.Map) ?unicode.WidthStrategy {
+            const raw = environ_map.get("ZZ_UNICODE_WIDTH") orelse return null;
             if (std.ascii.eqlIgnoreCase(raw, "unicode")) return .unicode;
             if (std.ascii.eqlIgnoreCase(raw, "legacy")) return .legacy_wcwidth;
             if (std.ascii.eqlIgnoreCase(raw, "auto")) return null;

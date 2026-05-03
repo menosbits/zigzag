@@ -249,27 +249,24 @@ pub const ColorProfile = enum {
     ansi256,
     true_color,
 
-    /// Detect terminal color profile from environment
-    pub fn detect() ColorProfile {
+    /// Detect terminal color profile from the supplied environment.
+    pub fn detect(environ_map: *const std.process.Environ.Map) ColorProfile {
         if (comptime builtin.os.tag == .windows) {
             // Windows Terminal supports true color VT sequences
             return .true_color;
         }
 
-        // Check NO_COLOR
-        if (std.posix.getenv("NO_COLOR")) |_| {
+        if (environ_map.get("NO_COLOR")) |_| {
             return .ascii;
         }
 
-        // Check for true color support
-        if (std.posix.getenv("COLORTERM")) |ct| {
+        if (environ_map.get("COLORTERM")) |ct| {
             if (std.mem.eql(u8, ct, "truecolor") or std.mem.eql(u8, ct, "24bit")) {
                 return .true_color;
             }
         }
 
-        // Check for 256 color support
-        if (std.posix.getenv("TERM")) |term| {
+        if (environ_map.get("TERM")) |term| {
             if (std.mem.indexOf(u8, term, "256color") != null) {
                 return .ansi256;
             }
@@ -294,13 +291,13 @@ pub const ColorProfile = enum {
     }
 };
 
-/// Detect if terminal has a dark background
-pub fn hasDarkBackground() bool {
+/// Detect if terminal has a dark background using the supplied environment.
+pub fn hasDarkBackground(environ_map: *const std.process.Environ.Map) bool {
     if (comptime builtin.os.tag == .windows) {
         return true;
     }
 
-    if (std.posix.getenv("COLORFGBG")) |val| {
+    if (environ_map.get("COLORFGBG")) |val| {
         // Format: "foreground;background"
         if (std.mem.lastIndexOfScalar(u8, val, ';')) |idx| {
             const bg_str = val[idx + 1 ..];

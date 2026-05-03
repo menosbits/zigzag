@@ -310,7 +310,7 @@ fn inlineStat(ctx: *const zz.Context, label: []const u8, value: []const u8) ![]c
 }
 
 pub fn main(init: std.process.Init) !void {
-    var program = try zz.Program(Model).init(init.gpa, init.io);
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
     try program.run();
 }

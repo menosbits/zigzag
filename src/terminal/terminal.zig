@@ -261,6 +261,7 @@ pub const Config = struct {
 /// Terminal abstraction
 pub const Terminal = struct {
     io: std.Io,
+    environ_map: *const std.process.Environ.Map,
     state: platform.State,
     config: Config,
     stdin: std.Io.File,
@@ -270,11 +271,12 @@ pub const Terminal = struct {
     unicode_width_caps: UnicodeWidthCapabilities = .{},
     image_caps: ImageCapabilities = .{},
 
-    pub fn init(io: std.Io, config: Config) !Terminal {
+    pub fn init(io: std.Io, environ_map: *const std.process.Environ.Map, config: Config) !Terminal {
         var state = platform.State.init();
 
         var term: Terminal = if (is_wasm) .{
             .io = io,
+            .environ_map = environ_map,
             .state = state,
             .config = config,
             .stdin = undefined,
@@ -294,6 +296,7 @@ pub const Terminal = struct {
 
             break :blk .{
                 .io = io,
+                .environ_map = environ_map,
                 .state = state,
                 .config = config,
                 .stdin = stdin,
@@ -1029,27 +1032,25 @@ pub const Terminal = struct {
             return;
         }
 
-        const term_features_owned = std.process.getEnvVarOwned(std.heap.page_allocator, "TERM_FEATURES") catch null;
-        defer if (term_features_owned) |value| std.heap.page_allocator.free(value);
-        const term_features = if (term_features_owned) |value| value else "";
+        const term_features = self.environ_map.get("TERM_FEATURES") orelse "";
 
-        const kitty_candidate = looksLikeKittyTerminal() or
-            envVarEquals("TERM_PROGRAM", "WezTerm") or
-            envVarContains("TERM", "wezterm") or
-            envVarContains("TERM", "ghostty");
-        const iterm_candidate = looksLikeIterm2Terminal() or
-            envVarEquals("TERM_PROGRAM", "WezTerm");
-        const in_multiplexer = isInsideMultiplexer();
+        const kitty_candidate = looksLikeKittyTerminal(self.environ_map) or
+            envVarEquals(self.environ_map, "TERM_PROGRAM", "WezTerm") or
+            envVarContains(self.environ_map, "TERM", "wezterm") or
+            envVarContains(self.environ_map, "TERM", "ghostty");
+        const iterm_candidate = looksLikeIterm2Terminal(self.environ_map) or
+            envVarEquals(self.environ_map, "TERM_PROGRAM", "WezTerm");
+        const in_multiplexer = isInsideMultiplexer(self.environ_map);
 
         var kitty = false;
         var iterm = iterm_candidate or termFeaturesContain(term_features, "F");
-        var sixel = looksLikeSixelTerminal() or termFeaturesContain(term_features, "Sx");
+        var sixel = looksLikeSixelTerminal(self.environ_map) or termFeaturesContain(term_features, "Sx");
 
         if (kitty_candidate) {
             kitty = self.queryKittyGraphicsSupport() catch false;
             // Keep an env fallback only outside multiplexers where probe failures are uncommon.
             if (!kitty and !in_multiplexer) {
-                kitty = envVarExists("KITTY_WINDOW_ID");
+                kitty = envVarExists(self.environ_map, "KITTY_WINDOW_ID");
             }
         }
 
@@ -1181,14 +1182,13 @@ pub const Terminal = struct {
     }
 
     fn resolveOsc52Passthrough(self: *const Terminal, mode: Osc52Passthrough) ansi.Osc52Passthrough {
-        _ = self;
         return switch (mode) {
             .none => .none,
             .tmux => .tmux,
             .dcs => .dcs,
             .auto => blk: {
-                if (envVarExists("TMUX")) break :blk .tmux;
-                if (envVarContains("TERM", "screen")) break :blk .dcs;
+                if (envVarExists(self.environ_map, "TMUX")) break :blk .tmux;
+                if (envVarContains(self.environ_map, "TERM", "screen")) break :blk .dcs;
                 break :blk .none;
             },
         };
@@ -1595,7 +1595,7 @@ pub const Terminal = struct {
     }
 
     fn selectWidthStrategy(self: *const Terminal) unicode.WidthStrategy {
-        if (isInsideMultiplexer()) {
+        if (isInsideMultiplexer(self.environ_map)) {
             return .legacy_wcwidth;
         }
 
@@ -1607,7 +1607,7 @@ pub const Terminal = struct {
             return .unicode;
         }
 
-        if (isKnownUnicodeWidthTerminal()) {
+        if (isKnownUnicodeWidthTerminal(self.environ_map)) {
             return .unicode;
         }
 
@@ -1615,7 +1615,7 @@ pub const Terminal = struct {
     }
 
     fn queryKittyTextSizingSupport(self: *Terminal) !bool {
-        if (!looksLikeKittyTerminal()) return false;
+        if (!looksLikeKittyTerminal(self.environ_map)) return false;
 
         const cpr = "\x1b[6n";
         // CR, CPR, draw 2-cell space via kitty OSC 66 width-only, CPR.
@@ -1684,8 +1684,8 @@ pub const Terminal = struct {
         return null;
     }
 
-    fn isInsideMultiplexer() bool {
-        return envVarExists("TMUX") or envVarExists("ZELLIJ") or envVarContains("TERM", "screen");
+    fn isInsideMultiplexer(environ_map: *const std.process.Environ.Map) bool {
+        return envVarExists(environ_map, "TMUX") or envVarExists(environ_map, "ZELLIJ") or envVarContains(environ_map, "TERM", "screen");
     }
 
     fn drainInput(self: *Terminal) void {
@@ -1738,28 +1738,28 @@ pub const Terminal = struct {
         return null;
     }
 
-    fn isKnownUnicodeWidthTerminal() bool {
+    fn isKnownUnicodeWidthTerminal(environ_map: *const std.process.Environ.Map) bool {
         // Terminals known to use grapheme-aware width by default.
-        return envVarEquals("TERM_PROGRAM", "WezTerm") or
-            envVarEquals("TERM_PROGRAM", "iTerm.app") or
-            envVarContains("TERM", "wezterm") or
-            envVarContains("TERM", "ghostty");
+        return envVarEquals(environ_map, "TERM_PROGRAM", "WezTerm") or
+            envVarEquals(environ_map, "TERM_PROGRAM", "iTerm.app") or
+            envVarContains(environ_map, "TERM", "wezterm") or
+            envVarContains(environ_map, "TERM", "ghostty");
     }
 
-    fn looksLikeKittyTerminal() bool {
-        return envVarExists("KITTY_WINDOW_ID") or envVarContains("TERM", "kitty");
+    fn looksLikeKittyTerminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarExists(environ_map, "KITTY_WINDOW_ID") or envVarContains(environ_map, "TERM", "kitty");
     }
 
-    fn looksLikeIterm2Terminal() bool {
-        return envVarEquals("TERM_PROGRAM", "iTerm.app") or
-            envVarEquals("LC_TERMINAL", "iTerm2");
+    fn looksLikeIterm2Terminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarEquals(environ_map, "TERM_PROGRAM", "iTerm.app") or
+            envVarEquals(environ_map, "LC_TERMINAL", "iTerm2");
     }
 
-    fn looksLikeSixelTerminal() bool {
-        return envVarContains("TERM", "sixel") or
-            envVarContains("TERM", "mlterm") or
-            envVarContains("TERM", "yaft") or
-            envVarContains("TERM", "contour");
+    fn looksLikeSixelTerminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarContains(environ_map, "TERM", "sixel") or
+            envVarContains(environ_map, "TERM", "mlterm") or
+            envVarContains(environ_map, "TERM", "yaft") or
+            envVarContains(environ_map, "TERM", "contour");
     }
 
     fn isLikelyFullSixelSequence(bytes: []const u8) bool {
@@ -1797,21 +1797,18 @@ pub const Terminal = struct {
         return true;
     }
 
-    fn envVarExists(name: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarExists(environ_map: *const std.process.Environ.Map, name: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return value.len > 0;
     }
 
-    fn envVarEquals(name: []const u8, expected: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarEquals(environ_map: *const std.process.Environ.Map, name: []const u8, expected: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return std.ascii.eqlIgnoreCase(value, expected);
     }
 
-    fn envVarContains(name: []const u8, needle: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarContains(environ_map: *const std.process.Environ.Map, name: []const u8, needle: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return std.mem.indexOf(u8, value, needle) != null;
     }
 

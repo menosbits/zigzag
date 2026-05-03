@@ -183,7 +183,7 @@ pub fn setupSignals() !void {
     const handler = posix.Sigaction{
         .handler = .{
             .handler = struct {
-                fn handle(_: c_int) callconv(std.builtin.CallingConvention.c) void {
+                fn handle(_: posix.SIG) callconv(.c) void {
                     resize_signaled.store(true, .release);
                 }
             }.handle,

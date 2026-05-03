@@ -110,7 +110,7 @@ pub const DevConsole = struct {
                 .tcp => |tcp| {
                     tcp.stopping.store(true, .seq_cst);
                     // Wake the listener by connecting once.
-                    if (tcp.listen_address.connect(io, .{})) |conn| {
+                    if (tcp.listen_address.connect(io, .{ .mode = .stream })) |conn| {
                         conn.close(io);
                     } else |_| {}
                     tcp.thread.join();
@@ -141,7 +141,7 @@ pub const DevConsole = struct {
                 try self.sinks.append(.stderr);
             },
             .tcp => |t| {
-                const addr = try std.Io.net.IpAddress.parseIp(t.host, t.port);
+                const addr = try std.Io.net.IpAddress.parse(t.host, t.port);
                 var server = try addr.listen(io, .{ .reuse_address = true });
                 errdefer server.deinit(io);
 
