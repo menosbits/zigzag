@@ -18,6 +18,12 @@ pub const Context = struct {
     /// Persistent allocator for model state (not reset between frames)
     persistent_allocator: std.mem.Allocator,
 
+    /// Process environment for env-driven detection (color, multiplexer, locale).
+    environ_map: *const std.process.Environ.Map,
+
+    /// Asynchronous I/O facilities (file, network, time, sleep).
+    io: std.Io,
+
     /// Terminal width in columns
     width: u16,
 
@@ -70,11 +76,18 @@ pub const Context = struct {
         }
     }
 
-    pub fn init(allocator: std.mem.Allocator, persistent_allocator: std.mem.Allocator) Context {
-        const profile = color_mod.ColorProfile.detect();
+    pub fn init(
+        allocator: std.mem.Allocator,
+        persistent_allocator: std.mem.Allocator,
+        io: std.Io,
+        environ_map: *const std.process.Environ.Map,
+    ) Context {
+        const profile = color_mod.ColorProfile.detect(environ_map);
         return .{
             .allocator = allocator,
             .persistent_allocator = persistent_allocator,
+            .io = io,
+            .environ_map = environ_map,
             .width = 80,
             .height = 24,
             .frame = 0,
@@ -83,7 +96,7 @@ pub const Context = struct {
             .true_color = profile.supportsTrueColor(),
             .color_256 = profile.supports256(),
             .color_profile = profile,
-            .is_dark_background = color_mod.hasDarkBackground(),
+            .is_dark_background = color_mod.hasDarkBackground(environ_map),
             .unicode_width_strategy = unicode_mod.getWidthStrategy(),
             .terminal_mode_2027 = false,
             .kitty_text_sizing = false,
@@ -347,10 +360,10 @@ pub const Options = struct {
     title: ?[]const u8 = null,
 
     /// Custom input file (default: stdin)
-    input: ?std.fs.File = null,
+    input: ?std.Io.File = null,
 
     /// Custom output file (default: stdout)
-    output: ?std.fs.File = null,
+    output: ?std.Io.File = null,
 
     /// Log file path for debug output
     log_file: ?[]const u8 = null,

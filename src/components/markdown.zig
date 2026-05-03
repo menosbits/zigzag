@@ -128,7 +128,13 @@ pub const Markdown = struct {
     /// Render markdown text to styled terminal output.
     pub fn render(self: *const Markdown, allocator: std.mem.Allocator, source: []const u8) ![]const u8 {
         var result: Writer.Allocating = .init(allocator);
+        errdefer result.deinit();
         const writer = &result.writer;
+
+        // Intermediate styled spans get freed in bulk at end of render.
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        defer arena.deinit();
+        const tmp = arena.allocator();
 
         var lines_iter = std.mem.splitScalar(u8, source, '\n');
         var in_code_block = false;
@@ -139,45 +145,45 @@ pub const Markdown = struct {
             first_line = false;
 
             // Code block toggle
-            if (std.mem.startsWith(u8, std.mem.trimLeft(u8, line, " "), "```")) {
+            if (std.mem.startsWith(u8, std.mem.trimStart(u8, line, " "), "```")) {
                 in_code_block = !in_code_block;
                 if (in_code_block) {
                     // Opening fence
-                    const bar = try self.code_block_border.render(allocator, "┌");
+                    const bar = try self.code_block_border.render(tmp, "┌");
                     try writer.writeAll(bar);
-                    const dash = try self.code_block_border.render(allocator, "─");
+                    const dash = try self.code_block_border.render(tmp, "─");
                     for (0..@min(self.width - 2, 40)) |_| {
                         try writer.writeAll(dash);
                     }
-                    const end = try self.code_block_border.render(allocator, "┐");
+                    const end = try self.code_block_border.render(tmp, "┐");
                     try writer.writeAll(end);
                 } else {
                     // Closing fence
-                    const bar = try self.code_block_border.render(allocator, "└");
+                    const bar = try self.code_block_border.render(tmp, "└");
                     try writer.writeAll(bar);
-                    const dash = try self.code_block_border.render(allocator, "─");
+                    const dash = try self.code_block_border.render(tmp, "─");
                     for (0..@min(self.width - 2, 40)) |_| {
                         try writer.writeAll(dash);
                     }
-                    const end = try self.code_block_border.render(allocator, "┘");
+                    const end = try self.code_block_border.render(tmp, "┘");
                     try writer.writeAll(end);
                 }
                 continue;
             }
 
             if (in_code_block) {
-                const bar = try self.code_block_border.render(allocator, "│ ");
+                const bar = try self.code_block_border.render(tmp, "│ ");
                 try writer.writeAll(bar);
-                const styled = try self.code_block_style.render(allocator, line);
+                const styled = try self.code_block_style.render(tmp, line);
                 try writer.writeAll(styled);
                 continue;
             }
 
-            const trimmed = std.mem.trimLeft(u8, line, " ");
+            const trimmed = std.mem.trimStart(u8, line, " ");
 
             // Horizontal rule
             if (trimmed.len >= 3 and isAllChar(trimmed, '-')) {
-                const dash = try self.hr_style.render(allocator, self.hr_char);
+                const dash = try self.hr_style.render(tmp, self.hr_char);
                 for (0..@min(self.width, 60)) |_| {
                     try writer.writeAll(dash);
                 }
@@ -185,7 +191,7 @@ pub const Markdown = struct {
             }
 
             if (trimmed.len >= 3 and isAllChar(trimmed, '*') and !std.mem.startsWith(u8, trimmed, "**")) {
-                const dash = try self.hr_style.render(allocator, self.hr_char);
+                const dash = try self.hr_style.render(tmp, self.hr_char);
                 for (0..@min(self.width, 60)) |_| {
                     try writer.writeAll(dash);
                 }
@@ -195,19 +201,19 @@ pub const Markdown = struct {
             // Headers
             if (std.mem.startsWith(u8, trimmed, "### ")) {
                 const content = trimmed[4..];
-                const styled = try self.h3_style.render(allocator, content);
+                const styled = try self.h3_style.render(tmp, content);
                 try writer.writeAll(styled);
                 continue;
             }
             if (std.mem.startsWith(u8, trimmed, "## ")) {
                 const content = trimmed[3..];
-                const styled = try self.h2_style.render(allocator, content);
+                const styled = try self.h2_style.render(tmp, content);
                 try writer.writeAll(styled);
                 continue;
             }
             if (std.mem.startsWith(u8, trimmed, "# ")) {
                 const content = trimmed[2..];
-                const styled = try self.h1_style.render(allocator, content);
+                const styled = try self.h1_style.render(tmp, content);
                 try writer.writeAll(styled);
                 continue;
             }
@@ -215,9 +221,9 @@ pub const Markdown = struct {
             // Blockquote
             if (std.mem.startsWith(u8, trimmed, "> ")) {
                 const content = trimmed[2..];
-                const bar = try self.blockquote_bar.render(allocator, "│ ");
+                const bar = try self.blockquote_bar.render(tmp, "│ ");
                 try writer.writeAll(bar);
-                const styled = try self.blockquote_style.render(allocator, content);
+                const styled = try self.blockquote_style.render(tmp, content);
                 try writer.writeAll(styled);
                 continue;
             }
@@ -226,10 +232,10 @@ pub const Markdown = struct {
             if (std.mem.startsWith(u8, trimmed, "- ") or std.mem.startsWith(u8, trimmed, "* ")) {
                 const indent = line.len - trimmed.len;
                 for (0..indent) |_| try writer.writeByte(' ');
-                const bullet = try self.list_bullet_style.render(allocator, "• ");
+                const bullet = try self.list_bullet_style.render(tmp, "• ");
                 try writer.writeAll(bullet);
                 const content = trimmed[2..];
-                const styled = try self.renderInline(allocator, content);
+                const styled = try self.renderInline(tmp, content);
                 try writer.writeAll(styled);
                 continue;
             }
@@ -239,10 +245,10 @@ pub const Markdown = struct {
                 if (std.mem.indexOf(u8, trimmed[0..@min(4, trimmed.len)], ". ")) |dot_pos| {
                     const indent = line.len - trimmed.len;
                     for (0..indent) |_| try writer.writeByte(' ');
-                    const num = try self.list_bullet_style.render(allocator, trimmed[0 .. dot_pos + 2]);
+                    const num = try self.list_bullet_style.render(tmp, trimmed[0 .. dot_pos + 2]);
                     try writer.writeAll(num);
                     const content = trimmed[dot_pos + 2 ..];
-                    const styled = try self.renderInline(allocator, content);
+                    const styled = try self.renderInline(tmp, content);
                     try writer.writeAll(styled);
                     continue;
                 }
@@ -254,7 +260,7 @@ pub const Markdown = struct {
             }
 
             // Regular paragraph with inline formatting
-            const styled = try self.renderInline(allocator, line);
+            const styled = try self.renderInline(tmp, line);
             try writer.writeAll(styled);
         }
 
@@ -262,8 +268,11 @@ pub const Markdown = struct {
     }
 
     /// Render inline formatting: **bold**, *italic*, `code`, [links](url)
+    /// `allocator` should be a short-lived/arena allocator: intermediate styled
+    /// spans are leaked into it (freed in bulk when the arena is reset).
     fn renderInline(self: *const Markdown, allocator: std.mem.Allocator, text: []const u8) ![]const u8 {
         var result: Writer.Allocating = .init(allocator);
+        errdefer result.deinit();
         const writer = &result.writer;
 
         var i: usize = 0;

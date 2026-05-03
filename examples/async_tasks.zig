@@ -29,7 +29,7 @@ const Model = struct {
         return .none;
     }
 
-    pub fn update(self: *Model, msg: Msg, _: *zz.Context) zz.Cmd(Msg) {
+    pub fn update(self: *Model, msg: Msg, ctx: *zz.Context) zz.Cmd(Msg) {
         switch (msg) {
             .key => |k| switch (k.key) {
                 .char => |c| switch (c) {
@@ -40,9 +40,9 @@ const Model = struct {
                         if (self.tasks_launched != 0) return .none;
                         self.status = "Tasks running...";
                         self.results = .{ "pending...", "pending...", "pending..." };
-                        _ = self.async_runner.spawn(&task1);
-                        _ = self.async_runner.spawn(&task2);
-                        _ = self.async_runner.spawn(&task3);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task1);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task2);
+                        _ = self.async_runner.spawnWithArg(std.Io, ctx.io, &task3);
                         self.tasks_launched = 3;
                         return zz.Cmd(Msg).everyMs(100);
                     },
@@ -80,18 +80,26 @@ const Model = struct {
         return .none;
     }
 
-    fn task1() ?Msg {
-        std.Thread.sleep(500_000_000); // 500ms
+    fn sleepNs(io: std.Io, ns: u64) void {
+        const duration: std.Io.Clock.Duration = .{
+            .raw = std.Io.Duration.fromNanoseconds(@intCast(ns)),
+            .clock = .boot,
+        };
+        duration.sleep(io) catch {};
+    }
+
+    fn task1(io: std.Io) ?Msg {
+        std.Io.sleep(io, .fromMilliseconds(500), .boot) catch unreachable; // 500ms
         return .{ .task_complete = .{ .id = 0, .value = "Task 1: computed pi = 3.14159" } };
     }
 
-    fn task2() ?Msg {
-        std.Thread.sleep(1_000_000_000); // 1s
+    fn task2(io: std.Io) ?Msg {
+        std.Io.sleep(io, .fromMilliseconds(1000), .boot) catch unreachable; // 1s
         return .{ .task_complete = .{ .id = 1, .value = "Task 2: fetched 42 records" } };
     }
 
-    fn task3() ?Msg {
-        std.Thread.sleep(750_000_000); // 750ms
+    fn task3(io: std.Io) ?Msg {
+        std.Io.sleep(io, .fromMilliseconds(750), .boot) catch unreachable; // 750ms
         return .{ .task_complete = .{ .id = 2, .value = "Task 3: file processed OK" } };
     }
 
@@ -113,7 +121,8 @@ const Model = struct {
         box_s = box_s.paddingAll(1);
         box_s = box_s.width(45);
 
-        const results_text = std.fmt.allocPrint(alloc,
+        const results_text = std.fmt.allocPrint(
+            alloc,
             "1: {s}\n2: {s}\n3: {s}",
             .{ self.results[0], self.results[1], self.results[2] },
         ) catch "";
@@ -122,7 +131,8 @@ const Model = struct {
         help_s = help_s.fg(zz.Color.gray(10));
         help_s = help_s.inline_style(true);
 
-        const content = std.fmt.allocPrint(alloc,
+        const content = std.fmt.allocPrint(
+            alloc,
             "{s}\n\n{s}\n\n{s}\n\n{s}",
             .{
                 title_s.render(alloc, "Async Tasks Demo") catch "Async Tasks",
@@ -136,11 +146,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
 
     try program.run();

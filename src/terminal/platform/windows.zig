@@ -35,11 +35,16 @@ const FILE_TYPE_CHAR: windows.DWORD = 0x0002;
 const FILE_TYPE_PIPE: windows.DWORD = 0x0003;
 const KEY_EVENT: windows.WORD = 0x0001;
 const MOUSE_EVENT: windows.WORD = 0x0002;
+const INFINITE: windows.DWORD = 0xFFFFFFFF;
+const WAIT_OBJECT_0: windows.DWORD = 0x00000000;
+const CP_UTF8: windows.UINT = 65001;
 
 /// Terminal state for Windows
 pub const State = struct {
     original_input_mode: windows.DWORD = 0,
     original_output_mode: windows.DWORD = 0,
+    original_output_cp: windows.UINT = 0,
+    original_input_cp: windows.UINT = 0,
     in_raw_mode: bool = false,
     in_alt_screen: bool = false,
     mouse_enabled: bool = false,
@@ -48,8 +53,8 @@ pub const State = struct {
 
     pub fn init() State {
         return .{
-            .stdin_handle = windows.GetStdHandle(windows.STD_INPUT_HANDLE) catch windows.INVALID_HANDLE_VALUE,
-            .stdout_handle = windows.GetStdHandle(windows.STD_OUTPUT_HANDLE) catch windows.INVALID_HANDLE_VALUE,
+            .stdin_handle = std.Io.File.stdin().handle,
+            .stdout_handle = std.Io.File.stdout().handle,
         };
     }
 };
@@ -83,6 +88,21 @@ extern "kernel32" fn ReadConsoleInputW(
     nLength: windows.DWORD,
     lpNumberOfEventsRead: *windows.DWORD,
 ) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn WaitForSingleObject(
+    hHandle: windows.HANDLE,
+    dwMilliseconds: windows.DWORD,
+) callconv(.winapi) windows.DWORD;
+extern "kernel32" fn ReadFile(
+    hFile: windows.HANDLE,
+    lpBuffer: [*]u8,
+    nNumberOfBytesToRead: windows.DWORD,
+    lpNumberOfBytesRead: ?*windows.DWORD,
+    lpOverlapped: ?*anyopaque,
+) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetConsoleOutputCP() callconv(.winapi) windows.UINT;
+extern "kernel32" fn SetConsoleOutputCP(wCodePageID: windows.UINT) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetConsoleCP() callconv(.winapi) windows.UINT;
+extern "kernel32" fn SetConsoleCP(wCodePageID: windows.UINT) callconv(.winapi) windows.BOOL;
 
 const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwSize: COORD,
@@ -133,13 +153,13 @@ const KEY_EVENT_RECORD = extern struct {
 pub fn isTty(handle: windows.HANDLE) bool {
     if (handle == windows.INVALID_HANDLE_VALUE) return false;
     var mode: windows.DWORD = 0;
-    return GetConsoleMode(handle, &mode) != 0;
+    return GetConsoleMode(handle, &mode).toBool();
 }
 
 /// Get terminal size
 pub fn getSize(handle: windows.HANDLE) !Size {
     var info: CONSOLE_SCREEN_BUFFER_INFO = undefined;
-    if (GetConsoleScreenBufferInfo(handle, &info) == 0) {
+    if (!GetConsoleScreenBufferInfo(handle, &info).toBool()) {
         return TerminalError.GetConsoleFailed;
     }
     return .{
@@ -159,27 +179,34 @@ pub fn enableRawMode(state: *State) !void {
     }
 
     // Save original modes
-    if (GetConsoleMode(state.stdin_handle, &state.original_input_mode) == 0) {
+    if (!GetConsoleMode(state.stdin_handle, &state.original_input_mode).toBool()) {
         return TerminalError.GetConsoleFailed;
     }
-    if (GetConsoleMode(state.stdout_handle, &state.original_output_mode) == 0) {
+    if (!GetConsoleMode(state.stdout_handle, &state.original_output_mode).toBool()) {
         return TerminalError.GetConsoleFailed;
     }
 
     // Set input mode for raw input with VT processing.
     // Avoid WINDOW_INPUT because it can signal wait handles without producing bytes for ReadFile.
     const input_mode: windows.DWORD = ENABLE_VIRTUAL_TERMINAL_INPUT;
-    if (SetConsoleMode(state.stdin_handle, input_mode) == 0) {
+    if (!SetConsoleMode(state.stdin_handle, input_mode).toBool()) {
         return TerminalError.SetConsoleFailed;
     }
 
     // Enable VT processing on output
     const output_mode: windows.DWORD = state.original_output_mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING;
-    if (SetConsoleMode(state.stdout_handle, output_mode) == 0) {
+    if (!SetConsoleMode(state.stdout_handle, output_mode).toBool()) {
         // Restore input mode and fail
         _ = SetConsoleMode(state.stdin_handle, state.original_input_mode);
         return TerminalError.SetConsoleFailed;
     }
+
+    // Switch the console code pages to UTF-8 so multi-byte sequences (box-drawing,
+    // emoji, etc.) emitted by the renderer aren't reinterpreted as the OEM codepage.
+    state.original_output_cp = GetConsoleOutputCP();
+    state.original_input_cp = GetConsoleCP();
+    _ = SetConsoleOutputCP(CP_UTF8);
+    _ = SetConsoleCP(CP_UTF8);
 
     state.in_raw_mode = true;
 }
@@ -190,6 +217,8 @@ pub fn disableRawMode(state: *State) void {
 
     _ = SetConsoleMode(state.stdin_handle, state.original_input_mode);
     _ = SetConsoleMode(state.stdout_handle, state.original_output_mode);
+    if (state.original_output_cp != 0) _ = SetConsoleOutputCP(state.original_output_cp);
+    if (state.original_input_cp != 0) _ = SetConsoleCP(state.original_input_cp);
 
     state.in_raw_mode = false;
 }
@@ -217,7 +246,7 @@ pub fn enableMouse(state: *State, writer: *Writer) !void {
     // Enable mouse input in console mode
     if (state.stdin_handle != windows.INVALID_HANDLE_VALUE) {
         var mode: windows.DWORD = 0;
-        if (GetConsoleMode(state.stdin_handle, &mode) != 0) {
+        if (GetConsoleMode(state.stdin_handle, &mode).toBool()) {
             _ = SetConsoleMode(state.stdin_handle, mode | ENABLE_MOUSE_INPUT);
         }
     }
@@ -241,21 +270,18 @@ pub fn readInput(state: *State, buffer: []u8, timeout_ms: i32) !usize {
 
     // Match POSIX behavior: wait up to timeout_ms for input, then return 0.
     const wait_ms: windows.DWORD = if (timeout_ms < 0)
-        windows.INFINITE
+        INFINITE
     else
         @intCast(timeout_ms);
 
-    windows.WaitForSingleObject(state.stdin_handle, wait_ms) catch |err| switch (err) {
-        error.WaitTimeOut => return 0,
-        else => return 0,
-    };
+    if (WaitForSingleObject(state.stdin_handle, wait_ms) != WAIT_OBJECT_0) return 0;
 
     const file_type = GetFileType(state.stdin_handle);
 
     // ConPTY/Windows Terminal can expose stdin as a pipe. Ensure there are bytes before reading.
     if (file_type == FILE_TYPE_PIPE) {
         var available: windows.DWORD = 0;
-        if (PeekNamedPipe(state.stdin_handle, null, 0, null, &available, null) == 0 or available == 0) {
+        if (!PeekNamedPipe(state.stdin_handle, null, 0, null, &available, null).toBool() or available == 0) {
             return 0;
         }
     }
@@ -266,8 +292,9 @@ pub fn readInput(state: *State, buffer: []u8, timeout_ms: i32) !usize {
     }
 
     // Read from the configured stdin handle after it is signaled as readable.
-    const stdin: std.fs.File = .{ .handle = state.stdin_handle };
-    return stdin.read(buffer) catch 0;
+    var bytes_read: windows.DWORD = 0;
+    if (!ReadFile(state.stdin_handle, buffer.ptr, @intCast(buffer.len), &bytes_read, null).toBool()) return 0;
+    return bytes_read;
 }
 
 fn hasReadableConsoleInput(handle: windows.HANDLE) bool {
@@ -275,26 +302,26 @@ fn hasReadableConsoleInput(handle: windows.HANDLE) bool {
 
     while (true) {
         var event_count: windows.DWORD = 0;
-        if (GetNumberOfConsoleInputEvents(handle, &event_count) == 0 or event_count == 0) {
+        if (!GetNumberOfConsoleInputEvents(handle, &event_count).toBool() or event_count == 0) {
             return false;
         }
 
         var peeked: windows.DWORD = 0;
-        if (PeekConsoleInputW(handle, &record_buf, 1, &peeked) == 0 or peeked == 0) {
+        if (!PeekConsoleInputW(handle, &record_buf, 1, &peeked).toBool() or peeked == 0) {
             return false;
         }
 
         const record = record_buf[0];
         switch (record.EventType) {
             KEY_EVENT => {
-                if (record.Event.KeyEvent.bKeyDown != 0) return true;
+                if (record.Event.KeyEvent.bKeyDown.toBool()) return true;
             },
             MOUSE_EVENT => return true,
             else => {},
         }
 
         var consumed: windows.DWORD = 0;
-        if (ReadConsoleInputW(handle, &record_buf, 1, &consumed) == 0 or consumed == 0) {
+        if (!ReadConsoleInputW(handle, &record_buf, 1, &consumed).toBool() or consumed == 0) {
             return false;
         }
     }

@@ -53,8 +53,13 @@ const Model = struct {
         self.md.width = @min(ctx.width -| 4, 80);
 
         self.viewport = zz.components.Viewport.init(ctx.persistent_allocator, self.md.width, ctx.height -| 4);
-        const rendered = self.md.render(ctx.persistent_allocator, sample_md) catch "render error";
-        self.viewport.setContent(rendered) catch {};
+        // Viewport.setContent dupes; render output is ephemeral.
+        if (self.md.render(ctx.persistent_allocator, sample_md)) |rendered| {
+            defer ctx.persistent_allocator.free(rendered);
+            self.viewport.setContent(rendered) catch {};
+        } else |_| {
+            self.viewport.setContent("render error") catch {};
+        }
 
         return .none;
     }
@@ -89,11 +94,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
 
     try program.run();

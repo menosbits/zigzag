@@ -62,8 +62,9 @@ pub const SinkConfig = union(enum) {
 
 pub const DevConsole = struct {
     allocator: std.mem.Allocator,
+    io: std.Io,
     sinks: std.array_list.Managed(Sink),
-    mutex: std.Thread.Mutex,
+    mutex: std.Io.Mutex,
     /// Filter: events below this level are dropped.
     min_level: Level,
     /// Whether to prefix each line with a timestamp.
@@ -71,44 +72,54 @@ pub const DevConsole = struct {
 
     const Sink = union(enum) {
         file: struct {
-            file: std.fs.File,
+            file: std.Io.File,
+            /// Append cursor. Only advanced after a successful flush — a failed
+            /// write leaves it pointing at the truncated record's start, so the
+            /// next entry overwrites the partial one. Not safe under concurrent
+            /// writers to the same file.
+            end_pos: u64,
         },
-        tcp: TcpSink,
+        tcp: *TcpSink,
         stderr,
     };
 
     const TcpSink = struct {
-        server: std.net.Server,
+        io: std.Io,
+        allocator: std.mem.Allocator,
+        listen_address: std.Io.net.IpAddress,
+        server: std.Io.net.Server,
         thread: std.Thread,
-        connections: std.array_list.Managed(std.net.Stream),
-        mutex: std.Thread.Mutex,
+        connections: std.array_list.Managed(std.Io.net.Stream),
+        mutex: std.Io.Mutex,
         /// Set to true to signal the accept thread to stop.
         stopping: std.atomic.Value(bool),
     };
 
-    pub fn init(allocator: std.mem.Allocator) DevConsole {
+    pub fn init(allocator: std.mem.Allocator, io: std.Io) DevConsole {
         return .{
             .allocator = allocator,
+            .io = io,
             .sinks = std.array_list.Managed(Sink).init(allocator),
-            .mutex = .{},
+            .mutex = .init,
             .min_level = .trace,
             .show_timestamps = true,
         };
     }
 
     pub fn deinit(self: *DevConsole) void {
+        const io = self.io;
         for (self.sinks.items) |*sink| {
             switch (sink.*) {
-                .file => |*f| f.file.close(),
-                .tcp => |*tcp| {
+                .file => |*f| f.file.close(io),
+                .tcp => |tcp| {
                     tcp.stopping.store(true, .seq_cst);
                     // Wake the listener by connecting once.
-                    if (std.net.tcpConnectToAddress(tcp.server.listen_address)) |conn| {
-                        conn.close();
+                    if (tcp.listen_address.connect(io, .{ .mode = .stream })) |conn| {
+                        conn.close(io);
                     } else |_| {}
                     tcp.thread.join();
-                    tcp.server.deinit();
-                    for (tcp.connections.items) |c| c.close();
+                    tcp.server.deinit(io);
+                    for (tcp.connections.items) |*c| c.close(io);
                     tcp.connections.deinit();
                     self.allocator.destroy(tcp);
                 },
@@ -123,55 +134,55 @@ pub const DevConsole = struct {
     }
 
     pub fn addSink(self: *DevConsole, cfg: SinkConfig) !void {
+        const io = self.io;
         switch (cfg) {
             .file => |path| {
-                const file = try std.fs.cwd().createFile(path, .{ .truncate = false });
-                file.seekFromEnd(0) catch {};
-                try self.sinks.append(.{ .file = .{ .file = file } });
+                const file = try std.Io.Dir.cwd().createFile(io, path, .{ .truncate = false });
+                const end_pos = std.Io.File.length(file, io) catch 0;
+                try self.sinks.append(.{ .file = .{ .file = file, .end_pos = end_pos } });
             },
             .stderr => {
                 try self.sinks.append(.stderr);
             },
             .tcp => |t| {
-                const addr = try std.net.Address.parseIp(t.host, t.port);
-                var server = try addr.listen(.{ .reuse_address = true });
-                errdefer server.deinit();
+                const addr = try std.Io.net.IpAddress.parse(t.host, t.port);
+                var server = try addr.listen(io, .{ .reuse_address = true });
+                errdefer server.deinit(io);
 
                 const tcp_ptr = try self.allocator.create(TcpSink);
                 errdefer self.allocator.destroy(tcp_ptr);
                 tcp_ptr.* = .{
+                    .io = io,
+                    .allocator = self.allocator,
+                    .listen_address = addr,
                     .server = server,
                     .thread = undefined,
-                    .connections = std.array_list.Managed(std.net.Stream).init(self.allocator),
-                    .mutex = .{},
+                    .connections = std.array_list.Managed(std.Io.net.Stream).init(self.allocator),
+                    .mutex = .init,
                     .stopping = std.atomic.Value(bool).init(false),
                 };
 
                 tcp_ptr.thread = try std.Thread.spawn(.{}, acceptLoop, .{tcp_ptr});
-                try self.sinks.append(.{ .tcp = tcp_ptr.* });
-                // Note: the `tcp` variant of Sink stores the TcpSink by value.
-                // We allocated the heap copy for the thread to reference; the
-                // sink's value copy is independent. Replace the value-stored
-                // field with one that points at the heap to keep them in sync.
-                // (We accept the slight indirection cost for clarity.)
+                try self.sinks.append(.{ .tcp = tcp_ptr });
             },
         }
     }
 
     fn acceptLoop(tcp: *TcpSink) void {
+        const io = tcp.io;
         while (!tcp.stopping.load(.seq_cst)) {
-            const conn = tcp.server.accept() catch break;
+            const conn = tcp.server.accept(io) catch break;
             if (tcp.stopping.load(.seq_cst)) {
-                conn.stream.close();
+                conn.close(io);
                 break;
             }
-            tcp.mutex.lock();
-            tcp.connections.append(conn.stream) catch {
-                conn.stream.close();
-                tcp.mutex.unlock();
+            tcp.mutex.lockUncancelable(io);
+            tcp.connections.append(conn) catch {
+                conn.close(io);
+                tcp.mutex.unlock(io);
                 continue;
             };
-            tcp.mutex.unlock();
+            tcp.mutex.unlock(io);
         }
     }
 
@@ -182,42 +193,52 @@ pub const DevConsole = struct {
         var stack_buf: [4096]u8 = undefined;
         const line = self.format(stack_buf[0..], level, fmt, args) catch return;
 
-        self.mutex.lock();
-        defer self.mutex.unlock();
+        const io = self.io;
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
 
         for (self.sinks.items) |*sink| {
             switch (sink.*) {
                 .file => |*f| {
-                    f.file.writeAll(line) catch {};
+                    var write_buf: [1024]u8 = undefined;
+                    var w = f.file.writer(io, &write_buf);
+                    w.seekTo(f.end_pos) catch continue;
+                    w.interface.writeAll(line) catch continue;
+                    w.interface.flush() catch continue;
+                    f.end_pos = w.logicalPos();
                 },
                 .stderr => {
                     std.debug.print("{s}", .{line});
                 },
-                .tcp => |*tcp_val| {
-                    // We only ever read tcp_val.connections (and its mutex).
-                    var keep = std.array_list.Managed(std.net.Stream).init(self.allocator);
+                .tcp => |tcp| {
+                    var keep = std.array_list.Managed(std.Io.net.Stream).init(self.allocator);
                     defer keep.deinit();
 
-                    tcp_val.mutex.lock();
-                    defer tcp_val.mutex.unlock();
-                    for (tcp_val.connections.items) |conn| {
-                        conn.writeAll(line) catch continue;
-                        keep.append(conn) catch continue;
+                    tcp.mutex.lockUncancelable(io);
+                    defer tcp.mutex.unlock(io);
+                    for (tcp.connections.items) |conn| {
+                        var write_buf: [1024]u8 = undefined;
+                        var w = conn.writer(io, &write_buf);
+                        if (w.interface.writeAll(line)) |_| {
+                            if (w.interface.flush()) |_| {
+                                keep.append(conn) catch continue;
+                            } else |_| {}
+                        } else |_| {}
                     }
                     // Drop dead connections.
-                    if (keep.items.len != tcp_val.connections.items.len) {
-                        for (tcp_val.connections.items) |conn| {
+                    if (keep.items.len != tcp.connections.items.len) {
+                        for (tcp.connections.items) |conn| {
                             var still_alive = false;
                             for (keep.items) |k| {
-                                if (k.handle == conn.handle) {
+                                if (k.socket.handle == conn.socket.handle) {
                                     still_alive = true;
                                     break;
                                 }
                             }
-                            if (!still_alive) conn.close();
+                            if (!still_alive) conn.close(io);
                         }
-                        tcp_val.connections.clearRetainingCapacity();
-                        tcp_val.connections.appendSlice(keep.items) catch {};
+                        tcp.connections.clearRetainingCapacity();
+                        tcp.connections.appendSlice(keep.items) catch {};
                     }
                 },
             }
@@ -227,7 +248,7 @@ pub const DevConsole = struct {
     fn format(self: *const DevConsole, buf: []u8, level: Level, comptime fmt: []const u8, args: anytype) ![]u8 {
         var writer: Writer = .fixed(buf);
         if (self.show_timestamps) {
-            const now = std.time.timestamp();
+            const now = std.Io.Timestamp.now(self.io, .real).toSeconds();
             const epoch = std.time.epoch.EpochSeconds{ .secs = @intCast(now) };
             const day = epoch.getDaySeconds();
             try writer.print("[{d:0>2}:{d:0>2}:{d:0>2}] ", .{
@@ -266,23 +287,24 @@ const testing = std.testing;
 
 test "file sink writes formatted log lines" {
     const allocator = testing.allocator;
+    const io = testing.io;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var orig = try std.fs.cwd().openDir(".", .{});
-    defer orig.close();
-    try tmp.dir.setAsCwd();
-    defer orig.setAsCwd() catch {};
+    var orig = try std.Io.Dir.cwd().openDir(io, ".", .{});
+    defer orig.close(io);
+    try std.process.setCurrentDir(io, tmp.dir);
+    defer std.process.setCurrentDir(io, orig) catch {};
 
-    var console = DevConsole.init(allocator);
+    var console = DevConsole.init(allocator, io);
     defer console.deinit();
     try console.addSink(.{ .file = "console.log" });
 
     console.info("hello {s}", .{"world"});
     console.warn("careful", .{});
 
-    const contents = try std.fs.cwd().readFileAlloc(allocator, "console.log", 4096);
-    defer allocator.free(contents);
+    var buf: [4096]u8 = undefined;
+    const contents = try std.Io.Dir.cwd().readFile(io, "console.log", &buf);
 
     try testing.expect(std.mem.indexOf(u8, contents, "hello world") != null);
     try testing.expect(std.mem.indexOf(u8, contents, "INFO") != null);
@@ -291,15 +313,16 @@ test "file sink writes formatted log lines" {
 
 test "min level filter" {
     const allocator = testing.allocator;
+    const io = testing.io;
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
 
-    var orig = try std.fs.cwd().openDir(".", .{});
-    defer orig.close();
-    try tmp.dir.setAsCwd();
-    defer orig.setAsCwd() catch {};
+    var orig = try std.Io.Dir.cwd().openDir(io, ".", .{});
+    defer orig.close(io);
+    try std.process.setCurrentDir(io, tmp.dir);
+    defer std.process.setCurrentDir(io, orig) catch {};
 
-    var console = DevConsole.init(allocator);
+    var console = DevConsole.init(allocator, io);
     defer console.deinit();
     try console.addSink(.{ .file = "filtered.log" });
     console.setMinLevel(.warn);
@@ -307,8 +330,8 @@ test "min level filter" {
     console.debug("hidden", .{});
     console.warn("visible", .{});
 
-    const contents = try std.fs.cwd().readFileAlloc(allocator, "filtered.log", 4096);
-    defer allocator.free(contents);
+    var buf: [4096]u8 = undefined;
+    const contents = try std.Io.Dir.cwd().readFile(io, "filtered.log", &buf);
     try testing.expect(std.mem.indexOf(u8, contents, "hidden") == null);
     try testing.expect(std.mem.indexOf(u8, contents, "visible") != null);
 }

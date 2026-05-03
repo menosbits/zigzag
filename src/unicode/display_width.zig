@@ -645,8 +645,8 @@ test "emoji are wide" {
     try std.testing.expectEqual(@as(usize, 2), charWidth(0x1F600)); // Grinning face
     try std.testing.expectEqual(@as(usize, 2), charWidth(0x1F4A9)); // Pile of poo
     try std.testing.expectEqual(@as(usize, 2), charWidth(0x1F680)); // Rocket
-    try std.testing.expectEqual(@as(usize, 2), charWidth(0x2615));  // Hot beverage
-    try std.testing.expectEqual(@as(usize, 2), charWidth(0x231A));  // Watch
+    try std.testing.expectEqual(@as(usize, 2), charWidth(0x2615)); // Hot beverage
+    try std.testing.expectEqual(@as(usize, 2), charWidth(0x231A)); // Watch
 }
 
 test "variation selectors are zero-width" {

@@ -46,14 +46,18 @@ pub fn Program(comptime Model: type) type {
 
     return struct {
         allocator: std.mem.Allocator,
+        io: std.Io,
+        environ_map: *const std.process.Environ.Map,
         arena: std.heap.ArenaAllocator,
         model: Model,
         terminal: ?Terminal,
         context: Context,
         options: Options,
         running: bool,
-        clock: std.time.Timer,
-        start_time: u64,
+        /// Boot-clock epoch from which `last_frame_time` and `context.elapsed` are measured.
+        /// `.boot` includes time the system was suspended, giving a monotonic reading
+        /// without gaps on resume.
+        clock_epoch: std.Io.Clock.Timestamp,
         last_frame_time: u64,
         pending_tick: ?u64,
         every_interval: ?u64,
@@ -69,28 +73,37 @@ pub fn Program(comptime Model: type) type {
         const Self = @This();
 
         /// Initialize the program
-        pub fn init(allocator: std.mem.Allocator) !Self {
-            return initWithOptions(allocator, .{});
+        pub fn init(
+            allocator: std.mem.Allocator,
+            io: std.Io,
+            environ_map: *const std.process.Environ.Map,
+        ) !Self {
+            return initWithOptions(allocator, io, environ_map, .{});
         }
 
         /// Initialize with custom options
-        pub fn initWithOptions(allocator: std.mem.Allocator, options: Options) !Self {
+        pub fn initWithOptions(
+            allocator: std.mem.Allocator,
+            io: std.Io,
+            environ_map: *const std.process.Environ.Map,
+            options: Options,
+        ) !Self {
             const arena = std.heap.ArenaAllocator.init(allocator);
-            var clock = try std.time.Timer.start();
-            const now = clock.read();
+            const clock_epoch = std.Io.Clock.Timestamp.now(io, .boot);
             const self = Self{
                 .allocator = allocator,
+                .io = io,
+                .environ_map = environ_map,
                 .arena = arena,
                 .model = undefined,
                 .terminal = null,
                 // `self` is returned by value, so don't capture an arena allocator here.
                 // It would point at this function's stack copy and dangle after return.
-                .context = Context.init(allocator, allocator),
+                .context = Context.init(allocator, allocator, io, environ_map),
                 .options = options,
                 .running = false,
-                .clock = clock,
-                .start_time = now,
-                .last_frame_time = now,
+                .clock_epoch = clock_epoch,
+                .last_frame_time = 0,
                 .pending_tick = null,
                 .every_interval = null,
                 .last_every_tick = 0,
@@ -151,14 +164,14 @@ pub fn Program(comptime Model: type) type {
         pub fn start(self: *Self) !void {
             // Initialize logger if configured
             if (self.options.log_file) |log_path| {
-                self.logger = Logger.init(log_path) catch null;
+                self.logger = Logger.init(self.io, log_path) catch null;
                 if (self.logger != null) {
                     self.context._logger = &self.logger.?;
                 }
             }
 
             // Initialize terminal
-            self.terminal = try Terminal.init(.{
+            self.terminal = try Terminal.init(self.io, self.environ_map, .{
                 .alt_screen = self.options.alt_screen,
                 .hide_cursor = !self.options.cursor,
                 .mouse = self.options.mouse,
@@ -187,9 +200,8 @@ pub fn Program(comptime Model: type) type {
             self.context.kitty_text_sizing = width_caps.kitty_text_sizing;
             unicode.setWidthStrategy(effective_width_strategy);
 
-            self.clock.reset();
-            self.start_time = self.clock.read();
-            self.last_frame_time = self.start_time;
+            self.clock_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
+            self.last_frame_time = 0;
             self.context.elapsed = 0;
             self.context.delta = 0;
             self.context.frame = 0;
@@ -210,7 +222,7 @@ pub fn Program(comptime Model: type) type {
 
         /// Execute a single frame: poll input, process events, render.
         pub fn tick(self: *Self) !void {
-            const now = self.clock.read();
+            const now = self.elapsedNs();
             const delta = now - self.last_frame_time;
 
             // Enforce framerate limit
@@ -220,15 +232,15 @@ pub fn Program(comptime Model: type) type {
                 16_666_666; // ~60fps default
 
             if (delta < min_frame_time_ns) {
-                sleepNs(min_frame_time_ns - delta);
+                sleepNs(self.io, min_frame_time_ns - delta);
             }
 
-            const frame_time = self.clock.read();
+            const frame_time = self.elapsedNs();
             const actual_delta = frame_time - self.last_frame_time;
             self.last_frame_time = frame_time;
 
             self.context.delta = actual_delta;
-            self.context.elapsed = frame_time - self.start_time;
+            self.context.elapsed = frame_time;
             self.context.frame += 1;
 
             self.resetFrameAllocator();
@@ -360,15 +372,14 @@ pub fn Program(comptime Model: type) type {
             if (self.options.unicode_width_strategy) |forced| {
                 return forced;
             }
-            if (envUnicodeWidthOverride()) |from_env| {
+            if (envUnicodeWidthOverride(self.environ_map)) |from_env| {
                 return from_env;
             }
             return detected;
         }
 
-        fn envUnicodeWidthOverride() ?unicode.WidthStrategy {
-            const raw = std.process.getEnvVarOwned(std.heap.page_allocator, "ZZ_UNICODE_WIDTH") catch return null;
-            defer std.heap.page_allocator.free(raw);
+        fn envUnicodeWidthOverride(environ_map: *const std.process.Environ.Map) ?unicode.WidthStrategy {
+            const raw = environ_map.get("ZZ_UNICODE_WIDTH") orelse return null;
             if (std.ascii.eqlIgnoreCase(raw, "unicode")) return .unicode;
             if (std.ascii.eqlIgnoreCase(raw, "legacy")) return .legacy_wcwidth;
             if (std.ascii.eqlIgnoreCase(raw, "auto")) return null;
@@ -405,7 +416,7 @@ pub fn Program(comptime Model: type) type {
             }
 
             // Avoid a large post-resume frame delta.
-            self.last_frame_time = self.clock.read();
+            self.last_frame_time = self.elapsedNs();
 
             // Force re-render
             self.last_view_hash = 0;
@@ -742,56 +753,17 @@ pub fn Program(comptime Model: type) type {
             return @intCast(value);
         }
 
-        fn sleepNs(nanoseconds: u64) void {
+        /// Nanoseconds elapsed on the boot clock since `clock_epoch`.
+        fn elapsedNs(self: *const Self) u64 {
+            const dur = self.clock_epoch.untilNow(self.io);
+            const ns = dur.raw.nanoseconds;
+            if (ns <= 0) return 0;
+            return @intCast(ns);
+        }
+
+        fn sleepNs(io: std.Io, nanoseconds: u64) void {
             if (nanoseconds == 0) return;
-            const ns_per_s: u64 = if (@hasDecl(std.time, "ns_per_s")) std.time.ns_per_s else 1_000_000_000;
-            const ns_per_ms: u64 = if (@hasDecl(std.time, "ns_per_ms")) std.time.ns_per_ms else 1_000_000;
-
-            // Zig 0.15 API path.
-            if (@hasDecl(std.Thread, "sleep")) {
-                std.Thread.sleep(nanoseconds);
-                return;
-            }
-
-            // Zig 0.16+ API path.
-            if (@hasDecl(std, "Io")) {
-                const Io = std.Io;
-                if (@hasDecl(Io, "Threaded") and
-                    @hasDecl(Io, "Clock") and
-                    @hasDecl(Io.Clock, "Duration") and
-                    @hasDecl(Io.Clock.Duration, "fromNanoseconds") and
-                    @hasDecl(Io.Clock.Duration, "sleep"))
-                {
-                    var threaded_io: Io.Threaded = .init_single_threaded;
-                    const io = threaded_io.io();
-                    const duration = Io.Clock.Duration.fromNanoseconds(@intCast(nanoseconds));
-                    duration.sleep(io) catch {};
-                    return;
-                }
-            }
-
-            // Fallback for targets/environments where the above are unavailable.
-            if (@hasDecl(std, "os") and @hasDecl(std.os, "windows") and builtin.os.tag == .windows) {
-                const windows = std.os.windows;
-                const big_ms_from_ns = nanoseconds / ns_per_ms;
-                const ms = std.math.cast(windows.DWORD, big_ms_from_ns) orelse std.math.maxInt(windows.DWORD);
-                windows.kernel32.Sleep(ms);
-                return;
-            }
-
-            if (@hasDecl(std, "posix") and @hasDecl(std.posix, "nanosleep")) {
-                const seconds = nanoseconds / ns_per_s;
-                const rem_ns = nanoseconds % ns_per_s;
-                std.posix.nanosleep(seconds, rem_ns);
-                return;
-            }
-
-            // Last resort: spin for the requested duration.
-            var timer = std.time.Timer.start() catch return;
-            const start_ns = timer.read();
-            while (timer.read() - start_ns < nanoseconds) {
-                std.atomic.spinLoopHint();
-            }
+            std.Io.sleep(io, .fromNanoseconds(nanoseconds), .boot) catch unreachable;
         }
 
         fn resetFrameAllocator(self: *Self) void {

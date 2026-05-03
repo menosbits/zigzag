@@ -8,7 +8,7 @@ const keys = @import("../input/keys.zig");
 const style_mod = @import("../style/style.zig");
 const Color = @import("../style/color.zig").Color;
 const measure = @import("../layout/measure.zig");
-const fs = std.fs;
+const Dir = std.Io.Dir;
 
 pub const FilePicker = struct {
     allocator: std.mem.Allocator,
@@ -128,7 +128,7 @@ pub const FilePicker = struct {
     }
 
     /// Navigate to a directory
-    pub fn navigate(self: *FilePicker, path: []const u8) !void {
+    pub fn navigate(self: *FilePicker, io: std.Io, path: []const u8) !void {
         // Update current path
         self.current_path.clearRetainingCapacity();
         try self.current_path.appendSlice(path);
@@ -151,13 +151,13 @@ pub const FilePicker = struct {
         }
 
         // Read directory
-        var dir = fs.openDirAbsolute(path, .{ .iterate = true }) catch {
+        var dir = Dir.openDirAbsolute(io, path, .{ .iterate = true }) catch {
             return;
         };
-        defer dir.close();
+        defer dir.close(io);
 
         var iter = dir.iterate();
-        while (iter.next() catch null) |entry| {
+        while (iter.next(io) catch null) |entry| {
             // Skip hidden files if not showing them
             const is_hidden = entry.name.len > 0 and entry.name[0] == '.';
             if (is_hidden and !self.show_hidden) continue;
@@ -186,7 +186,7 @@ pub const FilePicker = struct {
             // Get file size
             var size: u64 = 0;
             if (entry.kind == .file) {
-                const stat = dir.statFile(entry.name) catch null;
+                const stat = dir.statFile(io, entry.name, .{}) catch null;
                 if (stat) |s| {
                     size = s.size;
                 }
@@ -225,16 +225,14 @@ pub const FilePicker = struct {
         self.y_offset = 0;
     }
 
-    /// Navigate to home directory
-    pub fn navigateHome(self: *FilePicker) !void {
+    /// Navigate to home directory using the supplied environment.
+    pub fn navigateHome(self: *FilePicker, io: std.Io, environ_map: *const std.process.Environ.Map) !void {
         if (comptime builtin.os.tag == .windows) {
-            var env_map = try std.process.getEnvMap(self.allocator);
-            defer env_map.deinit();
-            const home = env_map.get("USERPROFILE") orelse "C:\\";
-            try self.navigate(home);
+            const home = environ_map.get("USERPROFILE") orelse "C:\\";
+            try self.navigate(io, home);
         } else {
-            const home = std.posix.getenv("HOME") orelse "/";
-            try self.navigate(home);
+            const home = environ_map.get("HOME") orelse "/";
+            try self.navigate(io, home);
         }
     }
 
@@ -255,7 +253,7 @@ pub const FilePicker = struct {
     }
 
     /// Select current entry
-    pub fn selectCurrent(self: *FilePicker) !bool {
+    pub fn selectCurrent(self: *FilePicker, io: std.Io) !bool {
         if (self.cursor >= self.entries.items.len) return false;
 
         const entry = self.entries.items[self.cursor];
@@ -266,11 +264,11 @@ pub const FilePicker = struct {
                 const parent = std.fs.path.dirname(self.current_path.items) orelse "/";
                 const parent_copy = try self.allocator.dupe(u8, parent);
                 defer self.allocator.free(parent_copy);
-                try self.navigate(parent_copy);
+                try self.navigate(io, parent_copy);
             } else {
                 const new_path = try std.fs.path.join(self.allocator, &.{ self.current_path.items, entry.name });
                 defer self.allocator.free(new_path);
-                try self.navigate(new_path);
+                try self.navigate(io, new_path);
             }
             return false;
         } else {
@@ -294,24 +292,29 @@ pub const FilePicker = struct {
     }
 
     /// Handle key event
-    pub fn handleKey(self: *FilePicker, key: keys.KeyEvent) !bool {
+    pub fn handleKey(
+        self: *FilePicker,
+        io: std.Io,
+        environ_map: *const std.process.Environ.Map,
+        key: keys.KeyEvent,
+    ) !bool {
         if (!self.focused) return false;
         switch (key.key) {
             .up => self.cursorUp(),
             .down => self.cursorDown(),
-            .enter => return try self.selectCurrent(),
+            .enter => return try self.selectCurrent(io),
             .backspace => {
                 const parent = std.fs.path.dirname(self.current_path.items) orelse "/";
                 const parent_copy = try self.allocator.dupe(u8, parent);
                 defer self.allocator.free(parent_copy);
-                try self.navigate(parent_copy);
+                try self.navigate(io, parent_copy);
             },
             .char => |c| {
                 switch (c) {
                     'j' => self.cursorDown(),
                     'k' => self.cursorUp(),
-                    'h' => self.showHidden(),
-                    '~' => try self.navigateHome(),
+                    'h' => self.showHidden(io),
+                    '~' => try self.navigateHome(io, environ_map),
                     else => {},
                 }
             },
@@ -320,11 +323,11 @@ pub const FilePicker = struct {
         return false;
     }
 
-    fn showHidden(self: *FilePicker) void {
+    fn showHidden(self: *FilePicker, io: std.Io) void {
         self.show_hidden = !self.show_hidden;
         const path_copy = self.allocator.dupe(u8, self.current_path.items) catch return;
         defer self.allocator.free(path_copy);
-        self.navigate(path_copy) catch {};
+        self.navigate(io, path_copy) catch {};
     }
 
     fn ensureVisible(self: *FilePicker) void {

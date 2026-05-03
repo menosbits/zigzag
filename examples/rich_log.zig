@@ -21,10 +21,10 @@ const Model = struct {
         log.show_timestamps = true;
 
         // Seed with a few entries.
-        log.append(.info, "RichLog example started") catch {};
-        log.append(.debug, "buffer capacity = 500 entries") catch {};
-        log.append(.info, "follow-mode enabled — new entries scroll into view") catch {};
-        log.append(.warn, "press '/' to filter, 'l' to cycle min level") catch {};
+        log.append(ctx.io, .info, "RichLog example started") catch {};
+        log.append(ctx.io, .debug, "buffer capacity = 500 entries") catch {};
+        log.append(ctx.io, .info, "follow-mode enabled — new entries scroll into view") catch {};
+        log.append(ctx.io, .warn, "press '/' to filter, 'l' to cycle min level") catch {};
 
         self.* = .{
             .log = log,
@@ -40,11 +40,11 @@ const Model = struct {
         self.search_term.deinit();
     }
 
-    pub fn update(self: *Model, msg: Msg, _: *zz.Context) zz.Cmd(Msg) {
+    pub fn update(self: *Model, msg: Msg, ctx: *zz.Context) zz.Cmd(Msg) {
         switch (msg) {
             .tick => {
                 self.counter += 1;
-                self.emit();
+                self.emit(ctx);
             },
             .key => |k| {
                 if (self.typing_search) return self.handleSearchKey(k);
@@ -104,15 +104,15 @@ const Model = struct {
         self.log.setMinLevel(next);
     }
 
-    fn emit(self: *Model) void {
+    fn emit(self: *Model, ctx: *zz.Context) void {
         // Generate one varied log entry per tick. Format strings must be
         // comptime, so dispatch in a switch.
         switch (self.counter % 5) {
-            0 => self.log.appendFmt(.trace, "trace: tick {d} fired", .{self.counter}) catch {},
-            1 => self.log.appendFmt(.debug, "debug: queue depth {d}", .{self.counter}) catch {},
-            2 => self.log.appendFmt(.info, "info: synced {d} records", .{self.counter}) catch {},
-            3 => self.log.appendFmt(.warn, "warn: retry {d} after backoff", .{self.counter}) catch {},
-            else => self.log.appendFmt(.err, "ERROR: timeout on request {d}", .{self.counter}) catch {},
+            0 => self.log.appendFmt(ctx.io, .trace, "trace: tick {d} fired", .{self.counter}) catch {},
+            1 => self.log.appendFmt(ctx.io, .debug, "debug: queue depth {d}", .{self.counter}) catch {},
+            2 => self.log.appendFmt(ctx.io, .info, "info: synced {d} records", .{self.counter}) catch {},
+            3 => self.log.appendFmt(ctx.io, .warn, "warn: retry {d} after backoff", .{self.counter}) catch {},
+            else => self.log.appendFmt(ctx.io, .err, "ERROR: timeout on request {d}", .{self.counter}) catch {},
         }
     }
 
@@ -160,11 +160,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
 
     try program.run();

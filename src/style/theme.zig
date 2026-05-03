@@ -1,6 +1,7 @@
 //! Theming system for ZigZag.
 //! Provides centralized color palettes and component-specific themes.
 
+const std = @import("std");
 const Color = @import("color.zig").Color;
 const style_mod = @import("style.zig");
 
@@ -305,9 +306,9 @@ pub const ThemeManager = struct {
     is_dark: bool,
     palette_index: usize,
 
-    /// Initialize with auto-detected dark/light background.
-    pub fn init() ThemeManager {
-        const is_dark = @import("color.zig").hasDarkBackground();
+    /// Initialize with dark/light background detected from `environ_map`.
+    pub fn init(environ_map: *const std.process.Environ.Map) ThemeManager {
+        const is_dark = @import("color.zig").hasDarkBackground(environ_map);
         const palette = AdaptivePalette.default.resolve(is_dark);
         return .{
             .current = .fromPalette(palette),
@@ -316,9 +317,9 @@ pub const ThemeManager = struct {
         };
     }
 
-    /// Initialize with a specific palette.
-    pub fn initWithPalette(palette: Palette) ThemeManager {
-        const is_dark = @import("color.zig").hasDarkBackground();
+    /// Initialize with a specific palette and `environ_map`-detected dark/light hint.
+    pub fn initWithPalette(environ_map: *const std.process.Environ.Map, palette: Palette) ThemeManager {
+        const is_dark = @import("color.zig").hasDarkBackground(environ_map);
         return .{
             .current = .fromPalette(palette),
             .is_dark = is_dark,

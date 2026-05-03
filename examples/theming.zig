@@ -15,7 +15,7 @@ const Model = struct {
     };
 
     pub fn init(self: *Model, ctx: *zz.Context) zz.Cmd(Msg) {
-        self.tm = zz.ThemeManager.init();
+        self.tm = zz.ThemeManager.init(ctx.environ_map);
         self.progress_val = 35;
         // Also set the theme on the context so components can read it
         ctx.setTheme(self.tm.current.palette);
@@ -152,11 +152,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer program.deinit();
 
     try program.run();

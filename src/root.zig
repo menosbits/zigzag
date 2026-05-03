@@ -13,7 +13,7 @@
 //!     count: i32,
 //!
 //!     pub const Msg = union(enum) {
-//!         key: zz.msg.Key,
+//!         key: zz.KeyEvent,
 //!     };
 //!
 //!     pub fn init(self: *Model, _: *zz.Context) zz.Cmd(Msg) {
@@ -38,11 +38,8 @@
 //!     }
 //! };
 //!
-//! pub fn main() !void {
-//!     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-//!     defer _ = gpa.deinit();
-//!
-//!     var program = try zz.Program(Model).init(gpa.allocator());
+//! pub fn main(init: std.process.Init) !void {
+//!     var program = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
 //!     defer program.deinit();
 //!     try program.run();
 //! }

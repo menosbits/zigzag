@@ -249,9 +249,9 @@ pub const Config = struct {
     /// Enable bracketed paste mode
     bracketed_paste: bool = true,
     /// Custom input file (default: stdin)
-    input: ?std.fs.File = null,
+    input: ?std.Io.File = null,
     /// Custom output file (default: stdout)
-    output: ?std.fs.File = null,
+    output: ?std.Io.File = null,
     /// Enable Kitty keyboard protocol
     kitty_keyboard: bool = false,
     /// OSC 52 clipboard configuration
@@ -260,26 +260,30 @@ pub const Config = struct {
 
 /// Terminal abstraction
 pub const Terminal = struct {
+    io: std.Io,
+    environ_map: *const std.process.Environ.Map,
     state: platform.State,
     config: Config,
-    stdin: std.fs.File,
+    stdin: std.Io.File,
     out: Writer,
     pending_input: [8192]u8 = undefined,
     pending_input_len: usize = 0,
     unicode_width_caps: UnicodeWidthCapabilities = .{},
     image_caps: ImageCapabilities = .{},
 
-    pub fn init(config: Config) !Terminal {
+    pub fn init(io: std.Io, environ_map: *const std.process.Environ.Map, config: Config) !Terminal {
         var state = platform.State.init();
 
         var term: Terminal = if (is_wasm) .{
+            .io = io,
+            .environ_map = environ_map,
             .state = state,
             .config = config,
             .stdin = undefined,
-            .out = .init({}),
+            .out = .init(io, {}),
         } else blk: {
-            const stdout = config.output orelse std.fs.File.stdout();
-            const stdin = config.input orelse std.fs.File.stdin();
+            const stdout = config.output orelse std.Io.File.stdout();
+            const stdin = config.input orelse std.Io.File.stdin();
 
             // Apply custom fd overrides
             if (builtin.os.tag != .windows) {
@@ -291,10 +295,12 @@ pub const Terminal = struct {
             }
 
             break :blk .{
+                .io = io,
+                .environ_map = environ_map,
                 .state = state,
                 .config = config,
                 .stdin = stdin,
-                .out = .init(stdout),
+                .out = .init(io, stdout),
             };
         };
 
@@ -545,8 +551,8 @@ pub const Terminal = struct {
         var collected = std.array_list.Managed(u8).init(allocator);
         defer collected.deinit();
 
-        const deadline_ms = std.time.milliTimestamp() + timeout_ms;
-        while (std.time.milliTimestamp() < deadline_ms) {
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
+        while (withinDeadline(self.io, start, @intCast(@max(timeout_ms, 0)))) {
             var chunk: [256]u8 = undefined;
             const n = self.readPlatformInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -681,7 +687,7 @@ pub const Terminal = struct {
     /// Transmit an image file to the Kitty cache without displaying it (`a=t,t=f`).
     pub fn transmitKittyImageFromFile(self: *Terminal, path: []const u8, options: KittyTransmitOptions) !bool {
         if (!self.image_caps.kitty_graphics or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         var params_buf: [256]u8 = undefined;
         var params_writer = FixedWriter(&params_buf);
@@ -736,11 +742,11 @@ pub const Terminal = struct {
     /// Returns `false` when unsupported or path is empty.
     pub fn drawIterm2ImageFromFile(self: *Terminal, path: []const u8, options: Iterm2ImageFileOptions) !bool {
         if (!self.image_caps.iterm2_inline_image or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
-        var file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-        const stat = try file.stat();
+        var file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
+        defer file.close(self.io);
+        const stat = try file.stat(self.io);
 
         var params_buf: [256]u8 = undefined;
         var params_writer = FixedWriter(&params_buf);
@@ -792,7 +798,7 @@ pub const Terminal = struct {
     /// Draw an image file using a specific or auto-selected protocol.
     pub fn drawImageFromFileWithProtocol(self: *Terminal, path: []const u8, options: ImageFileOptions, protocol: ImageProtocol) !bool {
         if (path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         switch (protocol) {
             .kitty => {
@@ -942,16 +948,16 @@ pub const Terminal = struct {
     /// - regular image files converted through `img2sixel` when available.
     pub fn drawSixelFromFile(self: *Terminal, path: []const u8, options: SixelImageFileOptions) !bool {
         if (!self.image_caps.sixel or path.len == 0) return false;
-        if (!fileExists(path)) return false;
+        if (!fileExists(self.io, path)) return false;
 
         if (isSixelDataPath(path)) {
-            var file = try std.fs.cwd().openFile(path, .{});
-            defer file.close();
+            var file = try std.Io.Dir.cwd().openFile(self.io, path, .{});
+            defer file.close(self.io);
             try self.sendSixelPayloadFromFile(&file);
             return true;
         }
 
-        if (!commandExists("img2sixel")) return false;
+        if (!commandExists(self.io, "img2sixel")) return false;
 
         var argv_buf: [6][]const u8 = undefined;
         var argc: usize = 0;
@@ -974,16 +980,16 @@ pub const Terminal = struct {
         argv_buf[argc] = path;
         argc += 1;
 
-        const result = try std.process.Child.run(.{
-            .allocator = std.heap.page_allocator,
+        const result = try std.process.run(std.heap.page_allocator, self.io, .{
             .argv = argv_buf[0..argc],
-            .max_output_bytes = options.max_output_bytes,
+            .stdout_limit = .limited(options.max_output_bytes),
+            .stderr_limit = .limited(options.max_output_bytes),
         });
         defer std.heap.page_allocator.free(result.stdout);
         defer std.heap.page_allocator.free(result.stderr);
 
         switch (result.term) {
-            .Exited => |code| if (code != 0) return error.BrokenPipe,
+            .exited => |code| if (code != 0) return error.BrokenPipe,
             else => return error.BrokenPipe,
         }
 
@@ -1026,27 +1032,25 @@ pub const Terminal = struct {
             return;
         }
 
-        const term_features_owned = std.process.getEnvVarOwned(std.heap.page_allocator, "TERM_FEATURES") catch null;
-        defer if (term_features_owned) |value| std.heap.page_allocator.free(value);
-        const term_features = if (term_features_owned) |value| value else "";
+        const term_features = self.environ_map.get("TERM_FEATURES") orelse "";
 
-        const kitty_candidate = looksLikeKittyTerminal() or
-            envVarEquals("TERM_PROGRAM", "WezTerm") or
-            envVarContains("TERM", "wezterm") or
-            envVarContains("TERM", "ghostty");
-        const iterm_candidate = looksLikeIterm2Terminal() or
-            envVarEquals("TERM_PROGRAM", "WezTerm");
-        const in_multiplexer = isInsideMultiplexer();
+        const kitty_candidate = looksLikeKittyTerminal(self.environ_map) or
+            envVarEquals(self.environ_map, "TERM_PROGRAM", "WezTerm") or
+            envVarContains(self.environ_map, "TERM", "wezterm") or
+            envVarContains(self.environ_map, "TERM", "ghostty");
+        const iterm_candidate = looksLikeIterm2Terminal(self.environ_map) or
+            envVarEquals(self.environ_map, "TERM_PROGRAM", "WezTerm");
+        const in_multiplexer = isInsideMultiplexer(self.environ_map);
 
         var kitty = false;
         var iterm = iterm_candidate or termFeaturesContain(term_features, "F");
-        var sixel = looksLikeSixelTerminal() or termFeaturesContain(term_features, "Sx");
+        var sixel = looksLikeSixelTerminal(self.environ_map) or termFeaturesContain(term_features, "Sx");
 
         if (kitty_candidate) {
             kitty = self.queryKittyGraphicsSupport() catch false;
             // Keep an env fallback only outside multiplexers where probe failures are uncommon.
             if (!kitty and !in_multiplexer) {
-                kitty = envVarExists("KITTY_WINDOW_ID");
+                kitty = envVarExists(self.environ_map, "KITTY_WINDOW_ID");
             }
         }
 
@@ -1178,14 +1182,13 @@ pub const Terminal = struct {
     }
 
     fn resolveOsc52Passthrough(self: *const Terminal, mode: Osc52Passthrough) ansi.Osc52Passthrough {
-        _ = self;
         return switch (mode) {
             .none => .none,
             .tmux => .tmux,
             .dcs => .dcs,
             .auto => blk: {
-                if (envVarExists("TMUX")) break :blk .tmux;
-                if (envVarContains("TERM", "screen")) break :blk .dcs;
+                if (envVarExists(self.environ_map, "TMUX")) break :blk .tmux;
+                if (envVarContains(self.environ_map, "TERM", "screen")) break :blk .dcs;
                 break :blk .none;
             },
         };
@@ -1243,7 +1246,7 @@ pub const Terminal = struct {
         }
     }
 
-    fn sendIterm2InlineImagePayload(self: *Terminal, params: []const u8, file: *std.fs.File, file_size: u64) !void {
+    fn sendIterm2InlineImagePayload(self: *Terminal, params: []const u8, file: *std.Io.File, file_size: u64) !void {
         const encoder = std.base64.standard.Encoder;
         var raw_buf: [3072]u8 = undefined;
         var b64_buf: [4096]u8 = undefined;
@@ -1256,8 +1259,11 @@ pub const Terminal = struct {
             try self.writeBytes(":");
 
             while (true) {
-                const n = try file.read(&raw_buf);
-                if (n == 0) break;
+                const n = file.readStreaming(self.io, &.{&raw_buf}) catch |err| switch (err) {
+                    error.EndOfStream => break,
+                    else => |e| return e,
+                };
+                if (n == 0) continue;
                 const encoded_len = encoder.calcSize(n);
                 const encoded = encoder.encode(b64_buf[0..encoded_len], raw_buf[0..n]);
                 try self.writeBytes(encoded);
@@ -1272,7 +1278,10 @@ pub const Terminal = struct {
         try self.writeBytes("\x07");
 
         while (true) {
-            const n = try file.read(&raw_buf);
+            const n = file.readStreaming(self.io, &.{&raw_buf}) catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => |e| return e,
+            };
             if (n == 0) break;
             const encoded_len = encoder.calcSize(n);
             const encoded = encoder.encode(b64_buf[0..encoded_len], raw_buf[0..n]);
@@ -1331,13 +1340,16 @@ pub const Terminal = struct {
         try self.writeBytes(ansi.OSC ++ "1337;FileEnd\x07");
     }
 
-    fn sendSixelPayloadFromFile(self: *Terminal, file: *std.fs.File) !void {
+    fn sendSixelPayloadFromFile(self: *Terminal, file: *std.Io.File) !void {
         var payload_buf: [4096]u8 = undefined;
         var first_read = true;
         var wrapped = false;
 
         while (true) {
-            const n = try file.read(&payload_buf);
+            const n = file.readStreaming(self.io, &.{&payload_buf}) catch |err| switch (err) {
+                error.EndOfStream => break,
+                else => |e| return e,
+            };
             if (n == 0) break;
             const chunk = payload_buf[0..n];
 
@@ -1376,9 +1388,9 @@ pub const Terminal = struct {
 
         var collected: [1024]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 180;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 180)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -1430,9 +1442,9 @@ pub const Terminal = struct {
 
         var collected: [2048]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 180;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 180)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 30) catch 0;
             if (n == 0) continue;
@@ -1470,9 +1482,9 @@ pub const Terminal = struct {
 
         var collected: [1024]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 120;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 120)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 25) catch 0;
             if (n == 0) continue;
@@ -1531,9 +1543,9 @@ pub const Terminal = struct {
 
         var collected: [512]u8 = undefined;
         var collected_len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 250;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 250)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 40) catch 0;
             if (n == 0) continue;
@@ -1583,7 +1595,7 @@ pub const Terminal = struct {
     }
 
     fn selectWidthStrategy(self: *const Terminal) unicode.WidthStrategy {
-        if (isInsideMultiplexer()) {
+        if (isInsideMultiplexer(self.environ_map)) {
             return .legacy_wcwidth;
         }
 
@@ -1595,7 +1607,7 @@ pub const Terminal = struct {
             return .unicode;
         }
 
-        if (isKnownUnicodeWidthTerminal()) {
+        if (isKnownUnicodeWidthTerminal(self.environ_map)) {
             return .unicode;
         }
 
@@ -1603,7 +1615,7 @@ pub const Terminal = struct {
     }
 
     fn queryKittyTextSizingSupport(self: *Terminal) !bool {
-        if (!looksLikeKittyTerminal()) return false;
+        if (!looksLikeKittyTerminal(self.environ_map)) return false;
 
         const cpr = "\x1b[6n";
         // CR, CPR, draw 2-cell space via kitty OSC 66 width-only, CPR.
@@ -1613,9 +1625,9 @@ pub const Terminal = struct {
 
         var buf: [512]u8 = undefined;
         var len: usize = 0;
-        const deadline_ms = std.time.milliTimestamp() + 250;
+        const start = std.Io.Clock.Timestamp.now(self.io, .boot);
 
-        while (std.time.milliTimestamp() < deadline_ms) {
+        while (withinDeadline(self.io, start, 250)) {
             var chunk: [128]u8 = undefined;
             const n = self.readInput(&chunk, 40) catch 0;
             if (n == 0) continue;
@@ -1672,8 +1684,8 @@ pub const Terminal = struct {
         return null;
     }
 
-    fn isInsideMultiplexer() bool {
-        return envVarExists("TMUX") or envVarExists("ZELLIJ") or envVarContains("TERM", "screen");
+    fn isInsideMultiplexer(environ_map: *const std.process.Environ.Map) bool {
+        return envVarExists(environ_map, "TMUX") or envVarExists(environ_map, "ZELLIJ") or envVarContains(environ_map, "TERM", "screen");
     }
 
     fn drainInput(self: *Terminal) void {
@@ -1726,28 +1738,28 @@ pub const Terminal = struct {
         return null;
     }
 
-    fn isKnownUnicodeWidthTerminal() bool {
+    fn isKnownUnicodeWidthTerminal(environ_map: *const std.process.Environ.Map) bool {
         // Terminals known to use grapheme-aware width by default.
-        return envVarEquals("TERM_PROGRAM", "WezTerm") or
-            envVarEquals("TERM_PROGRAM", "iTerm.app") or
-            envVarContains("TERM", "wezterm") or
-            envVarContains("TERM", "ghostty");
+        return envVarEquals(environ_map, "TERM_PROGRAM", "WezTerm") or
+            envVarEquals(environ_map, "TERM_PROGRAM", "iTerm.app") or
+            envVarContains(environ_map, "TERM", "wezterm") or
+            envVarContains(environ_map, "TERM", "ghostty");
     }
 
-    fn looksLikeKittyTerminal() bool {
-        return envVarExists("KITTY_WINDOW_ID") or envVarContains("TERM", "kitty");
+    fn looksLikeKittyTerminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarExists(environ_map, "KITTY_WINDOW_ID") or envVarContains(environ_map, "TERM", "kitty");
     }
 
-    fn looksLikeIterm2Terminal() bool {
-        return envVarEquals("TERM_PROGRAM", "iTerm.app") or
-            envVarEquals("LC_TERMINAL", "iTerm2");
+    fn looksLikeIterm2Terminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarEquals(environ_map, "TERM_PROGRAM", "iTerm.app") or
+            envVarEquals(environ_map, "LC_TERMINAL", "iTerm2");
     }
 
-    fn looksLikeSixelTerminal() bool {
-        return envVarContains("TERM", "sixel") or
-            envVarContains("TERM", "mlterm") or
-            envVarContains("TERM", "yaft") or
-            envVarContains("TERM", "contour");
+    fn looksLikeSixelTerminal(environ_map: *const std.process.Environ.Map) bool {
+        return envVarContains(environ_map, "TERM", "sixel") or
+            envVarContains(environ_map, "TERM", "mlterm") or
+            envVarContains(environ_map, "TERM", "yaft") or
+            envVarContains(environ_map, "TERM", "contour");
     }
 
     fn isLikelyFullSixelSequence(bytes: []const u8) bool {
@@ -1762,52 +1774,57 @@ pub const Terminal = struct {
             std.mem.endsWith(u8, path, ".SIX");
     }
 
-    fn fileExists(path: []const u8) bool {
-        std.fs.cwd().access(path, .{}) catch return false;
+    fn fileExists(io: std.Io, path: []const u8) bool {
+        std.Io.Dir.cwd().access(io, path, .{}) catch return false;
         return true;
     }
 
-    fn commandExists(name: []const u8) bool {
+    fn withinDeadline(io: std.Io, start: std.Io.Clock.Timestamp, timeout_ms: u64) bool {
+        const elapsed_ns = start.untilNow(io).raw.nanoseconds;
+        const deadline_ns: i96 = @as(i96, @intCast(timeout_ms)) * std.time.ns_per_ms;
+        return elapsed_ns < deadline_ns;
+    }
+
+    fn commandExists(io: std.Io, name: []const u8) bool {
         const argv = [_][]const u8{ name, "--version" };
-        const result = std.process.Child.run(.{
-            .allocator = std.heap.page_allocator,
+        const result = std.process.run(std.heap.page_allocator, io, .{
             .argv = &argv,
-            .max_output_bytes = 1024,
+            .stdout_limit = .limited(1024),
+            .stderr_limit = .limited(1024),
         }) catch return false;
         defer std.heap.page_allocator.free(result.stdout);
         defer std.heap.page_allocator.free(result.stderr);
         return true;
     }
 
-    fn envVarExists(name: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarExists(environ_map: *const std.process.Environ.Map, name: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return value.len > 0;
     }
 
-    fn envVarEquals(name: []const u8, expected: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarEquals(environ_map: *const std.process.Environ.Map, name: []const u8, expected: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return std.ascii.eqlIgnoreCase(value, expected);
     }
 
-    fn envVarContains(name: []const u8, needle: []const u8) bool {
-        const value = std.process.getEnvVarOwned(std.heap.page_allocator, name) catch return false;
-        defer std.heap.page_allocator.free(value);
+    fn envVarContains(environ_map: *const std.process.Environ.Map, name: []const u8, needle: []const u8) bool {
+        const value = environ_map.get(name) orelse return false;
         return std.mem.indexOf(u8, value, needle) != null;
     }
 
     /// Buffered writer that exposes a `std.Io.Writer` interface and drains to
     /// the terminal's output sink (stdout file, or the wasm host on wasm).
     pub const Writer = struct {
-        file: if (is_wasm) void else std.fs.File,
+        io: std.Io,
+        file: if (is_wasm) void else std.Io.File,
         buffer: [4096]u8 = undefined,
         writer: std.Io.Writer,
 
         const vtable: std.Io.Writer.VTable = .{ .drain = drain };
 
-        pub fn init(file: if (is_wasm) void else std.fs.File) Writer {
+        pub fn init(io: std.Io, file: if (is_wasm) void else std.Io.File) Writer {
             return .{
+                .io = io,
                 .file = file,
                 .writer = .{ .vtable = &vtable, .buffer = &.{} },
             };
@@ -1858,7 +1875,7 @@ pub const Terminal = struct {
             if (is_wasm) {
                 try platform.wasm_writer_instance.writer.writeAll(bytes);
             } else {
-                self.file.writeAll(bytes) catch return error.WriteFailed;
+                self.file.writeStreamingAll(self.io, bytes) catch return error.WriteFailed;
             }
         }
     };

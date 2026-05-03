@@ -184,11 +184,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var program = try zz.Program(Model).initWithOptions(gpa.allocator(), .{
+pub fn main(init: std.process.Init) !void {
+    var program = try zz.Program(Model).initWithOptions(init.gpa, init.io, init.environ_map, .{
         .title = "ZigZag OSC 52 Clipboard",
         .osc52 = .{
             .enabled = true,

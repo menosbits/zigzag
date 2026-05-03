@@ -215,11 +215,8 @@ const Model = struct {
     }
 };
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    var prog = try zz.Program(Model).init(gpa.allocator());
+pub fn main(init: std.process.Init) !void {
+    var prog = try zz.Program(Model).init(init.gpa, init.io, init.environ_map);
     defer prog.deinit();
 
     try prog.run();
