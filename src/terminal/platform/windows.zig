@@ -37,11 +37,14 @@ const KEY_EVENT: windows.WORD = 0x0001;
 const MOUSE_EVENT: windows.WORD = 0x0002;
 const INFINITE: windows.DWORD = 0xFFFFFFFF;
 const WAIT_OBJECT_0: windows.DWORD = 0x00000000;
+const CP_UTF8: windows.UINT = 65001;
 
 /// Terminal state for Windows
 pub const State = struct {
     original_input_mode: windows.DWORD = 0,
     original_output_mode: windows.DWORD = 0,
+    original_output_cp: windows.UINT = 0,
+    original_input_cp: windows.UINT = 0,
     in_raw_mode: bool = false,
     in_alt_screen: bool = false,
     mouse_enabled: bool = false,
@@ -96,6 +99,10 @@ extern "kernel32" fn ReadFile(
     lpNumberOfBytesRead: ?*windows.DWORD,
     lpOverlapped: ?*anyopaque,
 ) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetConsoleOutputCP() callconv(.winapi) windows.UINT;
+extern "kernel32" fn SetConsoleOutputCP(wCodePageID: windows.UINT) callconv(.winapi) windows.BOOL;
+extern "kernel32" fn GetConsoleCP() callconv(.winapi) windows.UINT;
+extern "kernel32" fn SetConsoleCP(wCodePageID: windows.UINT) callconv(.winapi) windows.BOOL;
 
 const CONSOLE_SCREEN_BUFFER_INFO = extern struct {
     dwSize: COORD,
@@ -194,6 +201,13 @@ pub fn enableRawMode(state: *State) !void {
         return TerminalError.SetConsoleFailed;
     }
 
+    // Switch the console code pages to UTF-8 so multi-byte sequences (box-drawing,
+    // emoji, etc.) emitted by the renderer aren't reinterpreted as the OEM codepage.
+    state.original_output_cp = GetConsoleOutputCP();
+    state.original_input_cp = GetConsoleCP();
+    _ = SetConsoleOutputCP(CP_UTF8);
+    _ = SetConsoleCP(CP_UTF8);
+
     state.in_raw_mode = true;
 }
 
@@ -203,6 +217,8 @@ pub fn disableRawMode(state: *State) void {
 
     _ = SetConsoleMode(state.stdin_handle, state.original_input_mode);
     _ = SetConsoleMode(state.stdout_handle, state.original_output_mode);
+    if (state.original_output_cp != 0) _ = SetConsoleOutputCP(state.original_output_cp);
+    if (state.original_input_cp != 0) _ = SetConsoleCP(state.original_input_cp);
 
     state.in_raw_mode = false;
 }
