@@ -59,6 +59,12 @@ pub fn Program(comptime Model: type) type {
         /// without gaps on resume.
         clock_epoch: std.Io.Clock.Timestamp,
         last_frame_time: u64,
+        /// Anchor for absolute frame pacing. Separate from `clock_epoch` so we can
+        /// rebase after suspend/resume or a long-overrun frame without disturbing
+        /// user-visible `context.elapsed` / `context.frame` (which `pending_tick`
+        /// and `every` depend on).
+        pacing_epoch: std.Io.Clock.Timestamp,
+        pacing_frame_offset: u64,
         pending_tick: ?u64,
         every_interval: ?u64,
         last_every_tick: u64,
@@ -104,6 +110,8 @@ pub fn Program(comptime Model: type) type {
                 .running = false,
                 .clock_epoch = clock_epoch,
                 .last_frame_time = 0,
+                .pacing_epoch = clock_epoch,
+                .pacing_frame_offset = 0,
                 .pending_tick = null,
                 .every_interval = null,
                 .last_every_tick = 0,
@@ -201,7 +209,9 @@ pub fn Program(comptime Model: type) type {
             unicode.setWidthStrategy(effective_width_strategy);
 
             self.clock_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
-            self.last_frame_time = 0;
+            self.last_frame_time = self.elapsedNs();
+            self.pacing_epoch = self.clock_epoch;
+            self.pacing_frame_offset = 0;
             self.context.elapsed = 0;
             self.context.delta = 0;
             self.context.frame = 0;
@@ -222,25 +232,12 @@ pub fn Program(comptime Model: type) type {
 
         /// Execute a single frame: poll input, process events, render.
         pub fn tick(self: *Self) !void {
-            const now = self.elapsedNs();
-            const delta = now - self.last_frame_time;
-
-            // Enforce framerate limit
-            const min_frame_time_ns: u64 = if (self.options.fps > 0)
-                @divFloor(std.time.ns_per_s, self.options.fps)
-            else
-                16_666_666; // ~60fps default
-
-            if (delta < min_frame_time_ns) {
-                sleepNs(self.io, min_frame_time_ns - delta);
-            }
-
-            const frame_time = self.elapsedNs();
-            const actual_delta = frame_time - self.last_frame_time;
-            self.last_frame_time = frame_time;
+            const tick_start = self.elapsedNs();
+            const actual_delta: u64 = if (self.context.frame == 0) 0 else tick_start - self.last_frame_time;
+            self.last_frame_time = tick_start;
 
             self.context.delta = actual_delta;
-            self.context.elapsed = frame_time;
+            self.context.elapsed = tick_start;
             self.context.frame += 1;
 
             self.resetFrameAllocator();
@@ -261,9 +258,9 @@ pub fn Program(comptime Model: type) type {
                 }
             }
 
-            // Read input
+            // Non-blocking drain; input typed during pacing sits in the TTY buffer.
             var input_buf: [256]u8 = undefined;
-            const bytes_read = try self.terminal.?.readInput(&input_buf, 16);
+            const bytes_read = try self.terminal.?.readInput(&input_buf, 0);
 
             if (bytes_read > 0) {
                 const events = try keyboard.parseAll(self.context.allocator, input_buf[0..bytes_read]);
@@ -286,7 +283,7 @@ pub fn Program(comptime Model: type) type {
                     // Deliver tick to user's update if Model.Msg has a tick variant
                     if (@hasField(UserMsg, "tick")) {
                         const user_msg = UserMsg{ .tick = .{
-                            .timestamp = @intCast(frame_time),
+                            .timestamp = @intCast(tick_start),
                             .delta = actual_delta,
                         } };
                         const cmd = self.dispatchToModel(user_msg);
@@ -301,7 +298,7 @@ pub fn Program(comptime Model: type) type {
                     self.last_every_tick = self.context.elapsed;
                     if (@hasField(UserMsg, "tick")) {
                         const user_msg = UserMsg{ .tick = .{
-                            .timestamp = @intCast(frame_time),
+                            .timestamp = @intCast(tick_start),
                             .delta = actual_delta,
                         } };
                         const cmd = self.dispatchToModel(user_msg);
@@ -313,6 +310,31 @@ pub fn Program(comptime Model: type) type {
             // Render
             try self.render();
             try self.flushPendingImage();
+
+            // Pace at end of tick; first tick skips so initial paint is immediate.
+            const min_frame_time_ns: u64 = if (self.options.fps > 0)
+                @divFloor(std.time.ns_per_s, self.options.fps)
+            else
+                16_666_666; // ~60fps default
+            const frames_since_anchor = self.context.frame - self.pacing_frame_offset;
+            if (frames_since_anchor > 1) {
+                const deadline_offset_ns: u64 = frames_since_anchor * min_frame_time_ns;
+                // If we've fallen far behind the schedule (long-overrun frame, or
+                // boot-clock advanced past the anchor while suspended), rebase the
+                // anchor instead of burst-rendering frames to "catch up."
+                const elapsed_since_anchor = self.pacingElapsedNs();
+                if (elapsed_since_anchor > deadline_offset_ns + 4 * min_frame_time_ns) {
+                    self.pacing_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
+                    self.pacing_frame_offset = self.context.frame;
+                } else {
+                    // Absolute deadline so sleep overshoot doesn't compound.
+                    const deadline: std.Io.Clock.Timestamp = self.pacing_epoch.addDuration(.{
+                        .raw = .{ .nanoseconds = @intCast(deadline_offset_ns) },
+                        .clock = .boot,
+                    });
+                    deadline.wait(self.io) catch unreachable;
+                }
+            }
         }
 
         /// Dispatch a message to the model, applying the filter if set
@@ -415,8 +437,11 @@ pub fn Program(comptime Model: type) type {
                 term.setup() catch {};
             }
 
-            // Avoid a large post-resume frame delta.
+            // Avoid a large post-resume frame delta, and rebase the pacing anchor
+            // so we don't burst-render to "catch up" the suspended interval.
             self.last_frame_time = self.elapsedNs();
+            self.pacing_epoch = std.Io.Clock.Timestamp.now(self.io, .boot);
+            self.pacing_frame_offset = self.context.frame;
 
             // Force re-render
             self.last_view_hash = 0;
@@ -756,6 +781,14 @@ pub fn Program(comptime Model: type) type {
         /// Nanoseconds elapsed on the boot clock since `clock_epoch`.
         fn elapsedNs(self: *const Self) u64 {
             const dur = self.clock_epoch.untilNow(self.io);
+            const ns = dur.raw.nanoseconds;
+            if (ns <= 0) return 0;
+            return @intCast(ns);
+        }
+
+        /// Nanoseconds elapsed on the boot clock since `pacing_epoch`.
+        fn pacingElapsedNs(self: *const Self) u64 {
+            const dur = self.pacing_epoch.untilNow(self.io);
             const ns = dur.raw.nanoseconds;
             if (ns <= 0) return 0;
             return @intCast(ns);
