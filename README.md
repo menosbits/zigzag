@@ -1288,6 +1288,10 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 
 MIT License - see LICENSE file for details.
 
+## Projects using `zigzag`
+
+- [zmenu](https://github.com/menosbits/zmenu) - A simple Zig application launcher for GNU/Linux.
+
 ## Acknowledgments
 
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) - The original Go TUI framework
